@@ -44,7 +44,14 @@ const PLAYERS_TIMEOUT_MS = 60_000;
  * both locally and on serverless hosts (where only /tmp is writable).
  */
 const CACHE_DIR = process.env.SLEEPER_CACHE_DIR ?? join(tmpdir(), "sleeper-cache");
-const CACHE_FILE = join(CACHE_DIR, "players-nfl.json");
+
+/**
+ * Bump whenever {@link PlayerLite} gains or loses a field. The on-disk copy
+ * lives for a day, so without a version in the filename a shape change would
+ * keep reading yesterday's records and silently miss the new fields.
+ */
+const CACHE_VERSION = 2;
+const CACHE_FILE = join(CACHE_DIR, `players-nfl.v${CACHE_VERSION}.json`);
 
 interface PlayerCacheFile {
   fetchedAt: number;
@@ -78,6 +85,8 @@ function toPlayerLite(player: Player): PlayerLite {
     age: player.age ?? null,
     search_rank: player.search_rank ?? null,
     active: Boolean(player.active),
+    gsisId: player.gsis_id ?? null,
+    espnId: player.espn_id ?? null,
   };
 }
 

@@ -35,6 +35,7 @@ export * from "./rules";
 export * from "./draft";
 export * from "./stats";
 export * from "./analytics";
+export * from "./player-analytics";
 export * from "./queries";
 export * from "./history";
 export * from "./futures";

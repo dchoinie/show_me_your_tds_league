@@ -3,7 +3,8 @@ import { cacheLife, cacheTag } from "next/cache";
 import { getCurrentWeek } from "./api";
 import { CACHE_TAGS, LEAGUE_ID } from "./config";
 import { getDraftRecap } from "./draft";
-import type { TeamRef } from "./queries";
+import { getAllPlayers } from "./players";
+import { getRosterMembership, getStandings, type TeamRef } from "./queries";
 import { getSeasonPoints } from "./stats";
 import type { PlayerId } from "./types";
 
@@ -363,4 +364,247 @@ export async function getDraftComposition(
 
     return [{ position, total: atPosition.length, tiers }];
   });
+}
+
+// ---------------------------------------------------------------------------
+// Roster age and competitive window
+// ---------------------------------------------------------------------------
+
+/** Where a franchise sits on the age/results grid. */
+export type Window = "contend" | "ascend" | "retool" | "stuck";
+
+/**
+ * Age bands chosen to match how fantasy production actually curves rather
+ * than as round numbers: players are still ascending into their mid-twenties,
+ * hold a prime through about 28, and decline after it.
+ */
+const AGE_BANDS: { key: string; label: string; min: number; max: number }[] = [
+  { key: "young", label: "Under 25", min: 0, max: 24 },
+  { key: "prime", label: "25-28", min: 25, max: 28 },
+  { key: "old", label: "29+", min: 29, max: 99 },
+];
+
+export interface AgeBand {
+  key: string;
+  label: string;
+  /** Players on the roster in this band. */
+  players: number;
+  /** Season points scored by them, under this league's rules. */
+  points: number;
+  /** Share of the team's total points, 0-1. */
+  pointsShare: number;
+  /** Points per player in the band - whether the bodies are productive. */
+  pointsPerPlayer: number;
+}
+
+export interface PositionAge {
+  position: string;
+  age: number;
+  count: number;
+}
+
+export interface TeamAgeProfile {
+  team: TeamRef;
+  rank: number;
+  winPct: number;
+  pointsFor: number;
+  /** Plain average age of everyone on the roster. */
+  rosterAge: number | null;
+  /**
+   * Average age weighted by season points, so it reflects who is actually
+   * producing rather than who is merely on the roster.
+   */
+  productionAge: number | null;
+  /**
+   * productionAge - rosterAge. The interesting number: negative means the
+   * young players are already carrying the scoring, positive means the
+   * veterans are and the youth has yet to arrive.
+   */
+  ageDelta: number | null;
+  /** Share of points from players under 25. */
+  youthShare: number | null;
+  bands: AgeBand[];
+  byPosition: PositionAge[];
+  /** Players still taxi-eligible under the constitution's 3-year rule. */
+  taxiEligible: number;
+  window: Window;
+}
+
+export interface AgeAnalysis {
+  teams: TeamAgeProfile[];
+  /** League median production age - the axis the window split uses. */
+  medianAge: number | null;
+  /** League-wide share of points by band, as a baseline to compare against. */
+  leagueBands: AgeBand[];
+}
+
+const mean = (values: number[]) =>
+  values.length === 0
+    ? null
+    : values.reduce((sum, value) => sum + value, 0) / values.length;
+
+function median(values: number[]): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? (sorted[mid - 1] + sorted[mid]) / 2
+    : sorted[mid];
+}
+
+const bandFor = (age: number) =>
+  AGE_BANDS.find((band) => age >= band.min && age <= band.max) ?? null;
+
+function buildBands(
+  entries: { age: number; points: number }[],
+): AgeBand[] {
+  const total = entries.reduce((sum, entry) => sum + entry.points, 0);
+
+  return AGE_BANDS.map((band) => {
+    const inBand = entries.filter((entry) => bandFor(entry.age)?.key === band.key);
+    const points = inBand.reduce((sum, entry) => sum + entry.points, 0);
+
+    return {
+      key: band.key,
+      label: band.label,
+      players: inBand.length,
+      points: Number(points.toFixed(1)),
+      pointsShare: total > 0 ? points / total : 0,
+      pointsPerPlayer:
+        inBand.length > 0 ? Number((points / inBand.length).toFixed(1)) : 0,
+    };
+  });
+}
+
+/**
+ * Roster age against results and against production.
+ *
+ * Two questions, not one. First, how old is a team's *scoring* - which the
+ * points-weighted age answers, and which the age bands break down. Second,
+ * whether that scoring is older or younger than the roster carrying it: a
+ * young team whose points all come from its veterans is a different prospect
+ * from a young team whose youth is already producing, even though a single
+ * average age cannot tell them apart.
+ */
+export async function getAgeAnalysis(
+  leagueId: string = LEAGUE_ID,
+): Promise<AgeAnalysis> {
+  "use cache";
+  cacheLife("sleeperLeague");
+  cacheTag(CACHE_TAGS.all, CACHE_TAGS.rosters(leagueId));
+
+  const [standings, membership, dictionary, seasonPoints] = await Promise.all([
+    getStandings(leagueId),
+    getRosterMembership(leagueId),
+    getAllPlayers(),
+    getSeasonPoints(undefined, leagueId),
+  ]);
+
+  const leagueEntries: { age: number; points: number }[] = [];
+
+  const built = standings.flatMap((team) => {
+    const roster = membership[team.rosterId];
+    if (!roster) return [];
+
+    const entries = roster.playerIds.flatMap((id) => {
+      const player = dictionary[id];
+      if (!player?.age) return [];
+      return [
+        {
+          age: player.age,
+          points: seasonPoints[id]?.points ?? 0,
+          position: player.position ?? "-",
+        },
+      ];
+    });
+
+    if (entries.length === 0) return [];
+    leagueEntries.push(...entries.map(({ age, points }) => ({ age, points })));
+
+    const totalPoints = entries.reduce((sum, entry) => sum + entry.points, 0);
+
+    const rosterAge = mean(entries.map((entry) => entry.age));
+    const productionAge =
+      totalPoints > 0
+        ? entries.reduce((sum, entry) => sum + entry.age * entry.points, 0) /
+          totalPoints
+        : null;
+
+    const byPositionMap = new Map<string, number[]>();
+    for (const entry of entries) {
+      byPositionMap.set(entry.position, [
+        ...(byPositionMap.get(entry.position) ?? []),
+        entry.age,
+      ]);
+    }
+
+    const bands = buildBands(entries);
+    const youth = bands.find((band) => band.key === "young");
+
+    return [
+      {
+        team: {
+          rosterId: team.rosterId,
+          teamName: team.teamName,
+          managerName: team.managerName,
+          avatarUrl: team.avatarUrl,
+        },
+        rank: team.rank,
+        winPct: team.winPct,
+        pointsFor: team.pointsFor,
+        rosterAge: rosterAge === null ? null : Number(rosterAge.toFixed(1)),
+        productionAge:
+          productionAge === null ? null : Number(productionAge.toFixed(1)),
+        ageDelta:
+          productionAge === null || rosterAge === null
+            ? null
+            : Number((productionAge - rosterAge).toFixed(1)),
+        youthShare: youth ? youth.pointsShare : null,
+        bands,
+        byPosition: [...byPositionMap.entries()]
+          .filter(([position]) => ANALYSED_POSITIONS.includes(position))
+          .map(([position, ages]) => ({
+            position,
+            age: Number((mean(ages) ?? 0).toFixed(1)),
+            count: ages.length,
+          }))
+          .sort(
+            (a, b) =>
+              ANALYSED_POSITIONS.indexOf(a.position) -
+              ANALYSED_POSITIONS.indexOf(b.position),
+          ),
+        // The constitution's taxi rule: 3 or fewer years of experience.
+        taxiEligible: roster.playerIds.filter(
+          (id) => (dictionary[id]?.years_exp ?? 99) <= 3,
+        ).length,
+        window: "retool" as Window,
+      },
+    ];
+  });
+
+  const medianAge = median(
+    built
+      .map((entry) => entry.productionAge)
+      .filter((age): age is number => age !== null),
+  );
+
+  const teams = built.map((entry) => {
+    const young =
+      medianAge === null ||
+      entry.productionAge === null ||
+      entry.productionAge <= medianAge;
+    const winning = entry.winPct >= 0.5;
+
+    const window: Window = winning
+      ? young
+        ? "ascend"
+        : "contend"
+      : young
+        ? "retool"
+        : "stuck";
+
+    return { ...entry, window };
+  });
+
+  return { teams, medianAge, leagueBands: buildBands(leagueEntries) };
 }

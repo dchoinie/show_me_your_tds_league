@@ -416,6 +416,13 @@ export interface PlayerLite {
   age: number | null;
   search_rank: number | null;
   active: boolean;
+  /**
+   * External ids kept for joining to nflverse, which keys on GSIS. Sleeper
+   * populates `gsis_id` for only about a third of its dictionary, so espn_id
+   * serves as a fallback.
+   */
+  gsisId: string | null;
+  espnId: number | null;
 }
 
 export type PlayerLiteMap = Record<PlayerId, PlayerLite>;
