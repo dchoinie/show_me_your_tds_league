@@ -121,32 +121,41 @@ function PlayoffBracket({ outlook }: { outlook: DraftOutlook }) {
   );
 }
 
+const boxClasses = (traded: boolean) =>
+  `border p-1.5 align-top ${
+    traded ? "border-accent/40 bg-accent/5" : "border-line/60 bg-surface"
+  }`;
+
+const boxTitle = (pick: DraftPickSlot) =>
+  pick.traded
+    ? `${pick.label} — ${pick.originalTeam.teamName} traded to ${pick.owner.teamName}`
+    : `${pick.label} — ${pick.originalTeam.teamName}`;
+
+/**
+ * A pick's label and, when it has moved, who owns it now.
+ *
+ * The owner line always renders - holding a non-breaking space when the pick
+ * has not been traded - so every box is the same height either way.
+ */
+function PickBody({ pick }: { pick: DraftPickSlot }) {
+  return (
+    <>
+      <span className="numerals block text-[10px] text-ink-dim">
+        {pick.round}.{pick.slot}
+      </span>
+      <span className="mt-0.5 block h-4 truncate text-[11px] leading-4 text-accent">
+        {pick.traded ? pick.owner.teamName : " "}
+      </span>
+    </>
+  );
+}
+
 function BoardCell({ pick }: { pick: DraftPickSlot | undefined }) {
   if (!pick) return <td className="border border-line/60" />;
 
   return (
-    <td
-      className={`border p-1.5 align-top ${
-        pick.traded
-          ? "border-accent/40 bg-accent/5"
-          : "border-line/60 bg-surface"
-      }`}
-      title={
-        pick.traded
-          ? `${pick.label} — ${pick.originalTeam.teamName} traded to ${pick.owner.teamName}`
-          : `${pick.label} — ${pick.originalTeam.teamName}`
-      }
-    >
-      <span className="numerals block text-[10px] text-ink-dim">
-        {pick.round}.{pick.slot}
-      </span>
-      {/*
-       * The owner line is always rendered, empty when the pick has not moved,
-       * so every box is the same height whether or not it was traded.
-       */}
-      <span className="mt-0.5 block h-4 truncate text-[11px] leading-4 text-accent">
-        {pick.traded ? pick.owner.teamName : " "}
-      </span>
+    <td className={boxClasses(pick.traded)} title={boxTitle(pick)}>
+      <PickBody pick={pick} />
     </td>
   );
 }
@@ -158,6 +167,63 @@ function BoardCell({ pick }: { pick: DraftPickSlot | undefined }) {
  * up as a tinted cell carrying someone else's name - the column it sits in is
  * still whose pick it originally was.
  */
+/**
+ * Below xl, twelve columns cannot fit any phone - so the board turns instead
+ * of shrinking: one card per team, with that team's four picks across it.
+ * Same data, same cells, orientation chosen to suit the viewport.
+ */
+function DraftBoardStacked({ outlook }: { outlook: DraftOutlook }) {
+  const columns = outlook.picks
+    .filter((pick) => pick.round === 1)
+    .sort((a, b) => a.slot - b.slot);
+
+  return (
+    <ul className="space-y-2 xl:hidden">
+      {columns.map((column) => {
+        const picks = outlook.picks
+          .filter((pick) => pick.slot === column.slot)
+          .sort((a, b) => a.round - b.round);
+
+        return (
+          <li
+            key={column.slot}
+            className="rounded-lg border border-line bg-surface p-3"
+          >
+            <Link
+              href={`/teams/${column.originalTeam.rosterId}`}
+              className="mb-2 flex items-center gap-2 transition-colors hover:text-accent"
+            >
+              <span className="numerals text-[11px] text-ink-dim">
+                {String(column.slot).padStart(2, "0")}
+              </span>
+              <TeamAvatar
+                name={column.originalTeam.teamName}
+                src={column.originalTeam.avatarUrl}
+                size={18}
+              />
+              <span className="min-w-0 truncate text-sm text-ink">
+                {column.originalTeam.teamName}
+              </span>
+            </Link>
+
+            <div className="grid grid-cols-4 gap-1.5">
+              {picks.map((pick) => (
+                <div
+                  key={pick.round}
+                  className={`rounded ${boxClasses(pick.traded)}`}
+                  title={boxTitle(pick)}
+                >
+                  <PickBody pick={pick} />
+                </div>
+              ))}
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 function DraftBoard({ outlook }: { outlook: DraftOutlook }) {
   const rounds = Array.from({ length: outlook.rounds }, (_, i) => i + 1);
   const columns = outlook.picks
@@ -165,10 +231,12 @@ function DraftBoard({ outlook }: { outlook: DraftOutlook }) {
     .sort((a, b) => a.slot - b.slot);
 
   return (
-    <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+    // Twelve across only from xl up, where the space genuinely exists - no
+    // forced min-width, so neither layout ever scrolls sideways.
+    <div className="hidden xl:block">
       {/* table-fixed keeps all twelve columns the same width regardless of
           how long a team's name is. */}
-      <table className="w-full min-w-272 table-fixed border-collapse">
+      <table className="w-full table-fixed border-collapse">
         <caption className="sr-only">
           {outlook.season} rookie draft board, by team and round
         </caption>
@@ -251,6 +319,7 @@ export function DraftOutlookSection({ outlook }: { outlook: DraftOutlook }) {
         </div>
 
         <DraftBoard outlook={outlook} />
+        <DraftBoardStacked outlook={outlook} />
 
         <p className="mt-3 max-w-3xl text-xs text-ink-dim">
           Order runs inverse to the current standings, so today&apos;s bottom
