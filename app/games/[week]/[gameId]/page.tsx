@@ -4,7 +4,40 @@ import { notFound } from "next/navigation";
 
 import { GameTrackerView } from "@/components/game-tracker";
 import { PageHeader } from "@/components/page-shell";
-import { getGameTracker } from "@/lib/sleeper";
+import {
+  getGameTracker,
+  getLeagueSummary,
+  getWeekPreview,
+} from "@/lib/sleeper";
+
+/**
+ * Every NFL game of the season.
+ *
+ * Needed for more than speed: reading `params` on a route with no static
+ * params is a dynamic access, which under Cache Components stops the route
+ * prerendering at all. Enumerating them here keeps this page consistent with
+ * the other dynamic routes. The live scores still arrive client-side.
+ */
+export async function generateStaticParams() {
+  const { lastWeek } = await getLeagueSummary();
+  const weeks = Array.from({ length: lastWeek }, (_, index) => index + 1);
+
+  const perWeek = await Promise.all(
+    weeks.map(async (week) => {
+      const preview = await getWeekPreview(week);
+      if (!preview) return [];
+
+      return preview.slates.flatMap((slate) =>
+        slate.games.map((game) => ({
+          week: String(week),
+          gameId: game.gameId,
+        })),
+      );
+    }),
+  );
+
+  return perWeek.flat();
+}
 
 export async function generateMetadata({
   params,
