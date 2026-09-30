@@ -35,6 +35,19 @@ const SORTS: { key: Sort; label: string }[] = [
   { key: "signal", label: "Signal" },
 ];
 
+/**
+ * What the table shows by default.
+ *
+ * "Movers" rather than everything: the point of this table is the players
+ * whose production has come loose from their usage, and a reader scrolling
+ * hundreds of rows to find them is being handed a database instead of an
+ * answer. The full list is one click away, and /players is the reference view.
+ */
+type View = "movers" | "all";
+
+/** Rows rendered at once; more load on request. */
+const PAGE_SIZE = 25;
+
 function pct(value: number | null): string {
   return value === null ? "—" : `${(value * 100).toFixed(1)}%`;
 }
@@ -114,12 +127,18 @@ export function PlayerUsageTable({
   analytics: PlayerAnalytics;
 }) {
   const [position, setPosition] = useState<string | null>(null);
-  const [sort, setSort] = useState<Sort>("usage");
+  const [sort, setSort] = useState<Sort>("signal");
+  const [view, setView] = useState<View>("movers");
+  const [visible, setVisible] = useState(PAGE_SIZE);
 
   const rows = useMemo(() => {
-    const filtered = position
-      ? analytics.rows.filter((row) => row.position === position)
-      : analytics.rows;
+    const filtered = analytics.rows.filter((row) => {
+      if (position && row.position !== position) return false;
+      if (view === "movers" && (!row.signal || row.signal === "aligned")) {
+        return false;
+      }
+      return true;
+    });
 
     return [...filtered].sort((a, b) => {
       if (sort === "points") return b.points - a.points;
@@ -132,7 +151,24 @@ export function PlayerUsageTable({
       }
       return b.opportunities - a.opportunities;
     });
-  }, [analytics.rows, position, sort]);
+  }, [analytics.rows, position, sort, view]);
+
+  const shown = rows.slice(0, visible);
+
+  // Any control change restarts the list from the top.
+  const reset =
+    <T,>(setter: (value: T) => void) =>
+    (value: T) => {
+      setter(value);
+      setVisible(PAGE_SIZE);
+    };
+
+  const button = (active: boolean) =>
+    `eyebrow rounded px-3 py-2 text-xs transition-colors ${
+      active
+        ? "bg-accent text-accent-ink"
+        : "bg-surface text-ink-muted hover:bg-surface-2 hover:text-ink"
+    }`;
 
   return (
     <div>
@@ -140,13 +176,9 @@ export function PlayerUsageTable({
         <div className="flex flex-wrap gap-1">
           <button
             type="button"
-            onClick={() => setPosition(null)}
+            onClick={() => reset(setPosition)(null)}
             aria-pressed={position === null}
-            className={`eyebrow rounded px-3 py-2 text-xs transition-colors ${
-              position === null
-                ? "bg-accent text-accent-ink"
-                : "bg-surface text-ink-muted hover:bg-surface-2 hover:text-ink"
-            }`}
+            className={button(position === null)}
           >
             All
           </button>
@@ -154,34 +186,42 @@ export function PlayerUsageTable({
             <button
               key={value}
               type="button"
-              onClick={() => setPosition(value)}
+              onClick={() => reset(setPosition)(value)}
               aria-pressed={position === value}
-              className={`eyebrow rounded px-3 py-2 text-xs transition-colors ${
-                position === value
-                  ? "bg-accent text-accent-ink"
-                  : "bg-surface text-ink-muted hover:bg-surface-2 hover:text-ink"
-              }`}
+              className={button(position === value)}
             >
               {value}
             </button>
           ))}
         </div>
 
-        <div className="flex gap-1 sm:ml-auto">
-          <span className="eyebrow self-center pr-1 text-[10px] text-ink-dim">
+        <div className="flex flex-wrap gap-1 sm:ml-auto">
+          {(
+            [
+              ["movers", "Movers"],
+              ["all", "All"],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => reset(setView)(value)}
+              aria-pressed={view === value}
+              className={button(view === value)}
+            >
+              {label}
+            </button>
+          ))}
+          <span className="eyebrow self-center pr-1 pl-2 text-[10px] text-ink-dim">
             Sort
           </span>
           {SORTS.map(({ key, label }) => (
             <button
               key={key}
               type="button"
-              onClick={() => setSort(key)}
+              onClick={() => reset(setSort)(key)}
               aria-pressed={sort === key}
-              className={`eyebrow rounded px-3 py-2 text-xs transition-colors ${
-                sort === key
-                  ? "bg-accent text-accent-ink"
-                  : "bg-surface text-ink-muted hover:bg-surface-2 hover:text-ink"
-              }`}
+              className={button(sort === key)}
             >
               {label}
             </button>
@@ -235,7 +275,7 @@ export function PlayerUsageTable({
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
+            {shown.map((row) => (
               <Row key={row.playerId} row={row} />
             ))}
           </tbody>
@@ -246,6 +286,16 @@ export function PlayerUsageTable({
         <p className="mt-4 rounded-lg border border-dashed border-line-bright bg-surface/40 px-6 py-14 text-center text-ink-muted">
           No players match that filter.
         </p>
+      )}
+
+      {visible < rows.length && (
+        <button
+          type="button"
+          onClick={() => setVisible((value) => value + PAGE_SIZE)}
+          className="eyebrow mt-4 w-full rounded border border-line bg-surface px-4 py-3 text-xs text-ink-muted transition-colors hover:border-line-bright hover:text-ink"
+        >
+          Show more · {rows.length - visible} remaining
+        </button>
       )}
     </div>
   );

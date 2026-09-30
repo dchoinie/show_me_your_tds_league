@@ -2,7 +2,12 @@ import type { Metadata } from "next";
 
 import { PlayerUsageTable } from "@/components/player-usage";
 import { QbAnalysisSection } from "@/components/qb-analysis";
-import { getPlayerAnalytics, getQbAnalysis } from "@/lib/sleeper";
+import { SnapShareTable } from "@/components/snap-share";
+import {
+  getPlayerAnalytics,
+  getQbAnalysis,
+  getSnapAnalytics,
+} from "@/lib/sleeper";
 
 export const metadata: Metadata = {
   title: "Player analytics",
@@ -11,9 +16,10 @@ export const metadata: Metadata = {
 };
 
 export default async function PlayerAnalyticsPage() {
-  const [analytics, qbs] = await Promise.all([
+  const [analytics, qbs, snaps] = await Promise.all([
     getPlayerAnalytics(),
     getQbAnalysis(),
+    getSnapAnalytics(),
   ]);
 
   return (
@@ -70,6 +76,48 @@ export default async function PlayerAnalyticsPage() {
           </p>
         )}
       </section>
+
+      {snaps.available && (
+        <section>
+          <div className="mb-5">
+            <h2 className="font-display text-2xl font-bold tracking-tight text-ink">
+              Snap share
+            </h2>
+            <p className="mt-1 max-w-3xl text-sm text-ink-dim">
+              The leading indicator the usage table cannot give you. Target
+              share tells you what a player&apos;s role{" "}
+              <span className="text-ink-muted">is</span>; snap share tells you
+              where it is <span className="text-ink-muted">going</span>. A
+              receiver climbing from 40% to 65% of his offense&apos;s snaps is
+              about to matter, and it shows up a week or two before the targets
+              follow.
+            </p>
+          </div>
+
+          <SnapShareTable analytics={snaps} />
+
+          <div className="mt-6 max-w-3xl space-y-2 text-xs text-ink-dim">
+            <p>
+              Free agents are included on purpose — a rising snap share on
+              somebody nobody owns is the most actionable thing here. Available
+              players are listed when they are playing at least 35% of their
+              team&apos;s snaps; below that the number says little.
+            </p>
+            <p>
+              <span className="text-ink-muted">Trend</span> compares the latest
+              week against the average of the weeks before it, so the number
+              always agrees with the right-hand end of the sparkline. Moves
+              under 8 share points read as steady.
+            </p>
+            <p>
+              Read a sharp fall alongside the injury tag before concluding
+              anything about a role. A player who left a game hurt shows a
+              collapsing snap share that is not a demotion — with three weeks
+              played, one bad afternoon moves these numbers a long way.
+            </p>
+          </div>
+        </section>
+      )}
 
       <QbAnalysisSection analysis={qbs} />
     </div>

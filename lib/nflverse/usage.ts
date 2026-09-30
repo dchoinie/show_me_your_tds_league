@@ -3,6 +3,7 @@ import { cacheLife, cacheTag } from "next/cache";
 import { getAllPlayers } from "../sleeper/players";
 import type { PlayerId } from "../sleeper/types";
 import { fetchCsv, NFLVERSE_RELEASE, num } from "./csv";
+import { getNflverseIdMaps } from "./ids";
 
 /**
  * Player opportunity data from nflverse.
@@ -196,25 +197,14 @@ export async function getSleeperToGsis(
   cacheLife("nflverseData");
   cacheTag("nflverse:crosswalk", `nflverse:crosswalk:${season}`);
 
-  const [usage, dictionary, players] = await Promise.all([
+  const [usage, dictionary, ids] = await Promise.all([
     getNflverseUsage(season),
     getAllPlayers(),
-    fetchCsv(`${NFLVERSE_RELEASE}/players/players.csv`),
+    getNflverseIdMaps(),
   ]);
 
   const active = new Set(Object.keys(usage));
   if (active.size === 0) return {};
-
-  const byEspn = new Map<string, string>();
-
-  if (players) {
-    const at = (row: string[], column: string) => row[players.index(column)];
-    for (const row of players.rows) {
-      const gsis = at(row, "gsis_id");
-      const espn = at(row, "espn_id");
-      if (gsis && espn && active.has(gsis)) byEspn.set(String(espn), gsis);
-    }
-  }
 
   // Name index built from the usage rows themselves, with collisions poisoned.
   const byName = new Map<string, string | null>();
@@ -233,8 +223,9 @@ export async function getSleeperToGsis(
     }
 
     const espn = player.espnId;
-    if (espn && byEspn.has(String(espn))) {
-      crosswalk[sleeperId] = byEspn.get(String(espn))!;
+    const viaEspn = espn ? ids.espnToGsis[String(espn)] : undefined;
+    if (viaEspn && active.has(viaEspn)) {
+      crosswalk[sleeperId] = viaEspn;
       continue;
     }
 
