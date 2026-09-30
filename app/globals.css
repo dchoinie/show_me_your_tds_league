@@ -1,0 +1,121 @@
+@import "tailwindcss";
+
+/*
+ * Dark-first broadcast theme. There is no light mode: the site is a scoreboard,
+ * and every surface assumes a dark field so score numerals carry the contrast.
+ *
+ * Colors are oklch so the accent stays perceptually even against every surface.
+ */
+@theme {
+  /* Surfaces, darkest to lightest. */
+  --color-field: oklch(0.155 0.012 265);
+  --color-surface: oklch(0.198 0.014 265);
+  --color-surface-2: oklch(0.246 0.016 265);
+  --color-line: oklch(0.31 0.014 265);
+  --color-line-bright: oklch(0.42 0.016 265);
+
+  /* Text, brightest to dimmest. */
+  --color-ink: oklch(0.97 0.004 265);
+  --color-ink-muted: oklch(0.74 0.012 265);
+  --color-ink-dim: oklch(0.58 0.014 265);
+
+  /* Scoreboard amber. Used for emphasis, never for large fills. */
+  --color-accent: oklch(0.79 0.164 66);
+  --color-accent-dim: oklch(0.62 0.13 66);
+  --color-accent-ink: oklch(0.18 0.03 66);
+
+  /* States. */
+  --color-live: oklch(0.63 0.222 23);
+  --color-win: oklch(0.78 0.17 148);
+  --color-loss: oklch(0.6 0.03 265);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-barlow-condensed), var(--font-inter), sans-serif;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  background-color: var(--color-field);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+/*
+ * Score and stat numerals. Tabular figures keep columns from shifting as
+ * scores tick up, which matters on the ticker and in standings.
+ */
+@utility numerals {
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+/* Section and nav labels: condensed, wide-tracked, small. */
+@utility eyebrow {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/*
+ * Ticker marquee. The track holds two copies of the chip list, so translating
+ * it -50% loops seamlessly.
+ */
+@keyframes ticker-scroll {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+@utility ticker-track {
+  animation: ticker-scroll 48s linear infinite;
+}
+
+.ticker:hover .ticker-track,
+.ticker:focus-within .ticker-track {
+  animation-play-state: paused;
+}
+
+/* Respect reduced motion: no crawl, just a scrollable strip. */
+@media (prefers-reduced-motion: reduce) {
+  .ticker {
+    overflow-x: auto;
+  }
+
+  .ticker-track {
+    animation: none;
+  }
+
+  /* The duplicate copy is decorative once the animation is gone. */
+  .ticker-track > [data-ticker-clone="true"] {
+    display: none;
+  }
+}
+
+/* Keyboard focus that stays visible on every surface. */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/*
+ * Tailwind v4 dropped the default `cursor: pointer` on buttons, so without
+ * this every button on the site reads as non-interactive. Set once in the
+ * base layer rather than sprinkling `cursor-pointer` on each one; utilities
+ * still win, so `disabled:cursor-not-allowed` keeps working.
+ */
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not(:disabled),
+  summary {
+    cursor: pointer;
+  }
+}
