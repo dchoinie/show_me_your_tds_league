@@ -80,6 +80,15 @@ export async function fetchCsv(
 export const NFLVERSE_RELEASE =
   "https://github.com/nflverse/nflverse-data/releases/download";
 
+/**
+ * Umbrella cache tag carried by every nflverse reader.
+ *
+ * Their pipeline rebuilds all its releases together, so refreshing one file
+ * without the others can leave the id crosswalk out of step with the stats it
+ * is meant to join. One tag revalidates the whole provider.
+ */
+export const NFLVERSE_TAG = "nflverse";
+
 /** Blank and "NA" both mean missing in these files. */
 export function num(value: string | undefined): number | null {
   if (value === undefined || value === "" || value === "NA") return null;

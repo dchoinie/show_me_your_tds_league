@@ -2,7 +2,7 @@ import { cacheLife, cacheTag } from "next/cache";
 
 import { getAllPlayers } from "../sleeper/players";
 import type { PlayerId } from "../sleeper/types";
-import { fetchCsv, NFLVERSE_RELEASE, num } from "./csv";
+import { NFLVERSE_RELEASE, NFLVERSE_TAG, fetchCsv, num } from "./csv";
 import { getNflverseIdMaps } from "./ids";
 
 /**
@@ -49,7 +49,7 @@ export async function getNflverseUsage(
 ): Promise<Record<string, PlayerUsage>> {
   "use cache";
   cacheLife("nflverseData");
-  cacheTag("nflverse:usage", `nflverse:usage:${season}`);
+  cacheTag(NFLVERSE_TAG, "nflverse:usage", `nflverse:usage:${season}`);
 
   const table = await fetchCsv(
     `${NFLVERSE_RELEASE}/stats_player/stats_player_week_${season}.csv`,
@@ -195,7 +195,7 @@ export async function getSleeperToGsis(
 ): Promise<Record<PlayerId, string>> {
   "use cache";
   cacheLife("nflverseData");
-  cacheTag("nflverse:crosswalk", `nflverse:crosswalk:${season}`);
+  cacheTag(NFLVERSE_TAG, "nflverse:crosswalk", `nflverse:crosswalk:${season}`);
 
   const [usage, dictionary, ids] = await Promise.all([
     getNflverseUsage(season),

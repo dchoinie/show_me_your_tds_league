@@ -1,5 +1,7 @@
 import { cacheLife, cacheTag } from "next/cache";
 
+import { fetchCsv, NFLVERSE_RELEASE, NFLVERSE_TAG, num } from "./csv";
+
 /**
  * NFL game metadata from nflverse.
  *
@@ -11,9 +13,6 @@ import { cacheLife, cacheTag } from "next/cache";
  * a day, so anything in-play would be hours stale. Live fantasy points come
  * from Sleeper.
  */
-
-const GAMES_CSV =
-  "https://github.com/nflverse/nflverse-data/releases/download/schedules/games.csv";
 
 /** Sleeper calls the Rams LAR; nflverse calls them LA. Only mismatch of 32. */
 const TEAM_ALIASES: Record<string, string> = { LA: "LAR" };
@@ -98,41 +97,6 @@ function toKickoff(gameday: string, gametime: string): string | null {
   ).toISOString();
 }
 
-/** Minimal CSV row splitter that respects quoted fields. */
-function splitRow(line: string): string[] {
-  const out: string[] = [];
-  let current = "";
-  let quoted = false;
-
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
-
-    if (char === '"') {
-      // A doubled quote inside a quoted field is a literal quote.
-      if (quoted && line[i + 1] === '"') {
-        current += '"';
-        i++;
-      } else {
-        quoted = !quoted;
-      }
-    } else if (char === "," && !quoted) {
-      out.push(current);
-      current = "";
-    } else {
-      current += char;
-    }
-  }
-
-  out.push(current);
-  return out;
-}
-
-const num = (value: string): number | null => {
-  if (value === "" || value === "NA") return null;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
-};
-
 /**
  * Every game in one season.
  *
@@ -144,31 +108,17 @@ export async function getNflverseGames(
 ): Promise<NflverseGame[]> {
   "use cache";
   cacheLife("nflverseData");
-  cacheTag("nflverse:games", `nflverse:games:${season}`);
+  cacheTag(NFLVERSE_TAG, "nflverse:games", `nflverse:games:${season}`);
 
-  let csv: string;
-  try {
-    const response = await fetch(GAMES_CSV, {
-      headers: { accept: "text/csv" },
-      signal: AbortSignal.timeout(30_000),
-    });
-    if (!response.ok) return [];
-    csv = await response.text();
-  } catch {
-    // Optional enrichment: everything degrades to Sleeper's day-granular data.
-    return [];
-  }
+  // Optional enrichment: a failure degrades to Sleeper's day-granular data.
+  const table = await fetchCsv(`${NFLVERSE_RELEASE}/schedules/games.csv`, 30_000);
+  if (!table) return [];
 
-  const lines = csv.trim().split("\n");
-  if (lines.length < 2) return [];
-
-  const header = splitRow(lines[0]).map((h) => h.trim());
-  const at = (row: string[], name: string) => row[header.indexOf(name)] ?? "";
+  const at = (row: string[], name: string) => row[table.index(name)] ?? "";
 
   const games: NflverseGame[] = [];
 
-  for (let i = 1; i < lines.length; i++) {
-    const row = splitRow(lines[i]);
+  for (const row of table.rows) {
     if (at(row, "season") !== season) continue;
 
     const gameday = at(row, "gameday");

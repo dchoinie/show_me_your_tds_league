@@ -1,6 +1,6 @@
 import { cacheLife, cacheTag } from "next/cache";
 
-import { fetchCsv, NFLVERSE_RELEASE, num } from "./csv";
+import { NFLVERSE_RELEASE, NFLVERSE_TAG, fetchCsv, num } from "./csv";
 import { getNflverseIdMaps } from "./ids";
 
 /**
@@ -56,7 +56,7 @@ export async function getSnapShares(
 ): Promise<Record<string, SnapShare>> {
   "use cache";
   cacheLife("nflverseData");
-  cacheTag("nflverse:snaps", `nflverse:snaps:${season}`);
+  cacheTag(NFLVERSE_TAG, "nflverse:snaps", `nflverse:snaps:${season}`);
 
   const [table, ids] = await Promise.all([
     fetchCsv(`${NFLVERSE_RELEASE}/snap_counts/snap_counts_${season}.csv`),

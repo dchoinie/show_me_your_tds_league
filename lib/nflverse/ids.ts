@@ -1,6 +1,6 @@
 import { cacheLife, cacheTag } from "next/cache";
 
-import { fetchCsv, NFLVERSE_RELEASE } from "./csv";
+import { NFLVERSE_RELEASE, NFLVERSE_TAG, fetchCsv } from "./csv";
 
 /**
  * Cross-reference between the id schemes nflverse publishes.
@@ -21,7 +21,7 @@ export interface NflverseIdMaps {
 export async function getNflverseIdMaps(): Promise<NflverseIdMaps> {
   "use cache";
   cacheLife("nflverseData");
-  cacheTag("nflverse:ids");
+  cacheTag(NFLVERSE_TAG, "nflverse:ids");
 
   const table = await fetchCsv(`${NFLVERSE_RELEASE}/players/players.csv`);
   if (!table) return { espnToGsis: {}, pfrToGsis: {} };
