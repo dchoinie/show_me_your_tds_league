@@ -3,7 +3,7 @@ import { cacheLife, cacheTag } from "next/cache";
 import { getTrendingPlayers } from "./api";
 import { CACHE_TAGS, LEAGUE_ID } from "./config";
 import { getAllPlayers, getPlayers } from "./players";
-import { getTeams, type TeamRef } from "./queries";
+import { getRosterMembership, getTeams, type TeamRef } from "./queries";
 import { getSeasonPoints } from "./stats";
 import type { PlayerId, RosterId } from "./types";
 
@@ -69,11 +69,12 @@ export async function getPlayerDirectory(
   leagueId: string = LEAGUE_ID,
 ): Promise<PlayerDirectory> {
   "use cache";
-  cacheLife("sleeperLeague");
+  cacheLife("sleeperRoster");
   cacheTag(CACHE_TAGS.all, CACHE_TAGS.rosters(leagueId));
 
-  const [teams, dictionary, seasonPoints] = await Promise.all([
+  const [teams, membership, dictionary, seasonPoints] = await Promise.all([
     getTeams(leagueId),
+    getRosterMembership(leagueId),
     getAllPlayers(),
     getSeasonPoints(undefined, leagueId),
   ]);
@@ -83,15 +84,18 @@ export async function getPlayerDirectory(
   const owned = new Map<PlayerId, Ownership>();
 
   for (const team of teams) {
+    const roster = membership[team.rosterId];
+    if (!roster) continue;
+
     const ref = toRef(team);
     const assign = (ids: PlayerId[], spot: RosterSpot) => {
       for (const id of ids) owned.set(id, { team: ref, spot });
     };
 
-    assign(team.playerIds, "bench");
-    assign(team.starterIds, "starter");
-    assign(team.taxiIds, "taxi");
-    assign(team.reserveIds, "ir");
+    assign(roster.playerIds, "bench");
+    assign(roster.starterIds, "starter");
+    assign(roster.taxiIds, "taxi");
+    assign(roster.reserveIds, "ir");
   }
 
   const build = (id: PlayerId): DirectoryEntry | null => {
@@ -174,15 +178,18 @@ export async function getTrending(
   cacheLife("sleeperLive");
   cacheTag(CACHE_TAGS.all, `sleeper:trending:${type}`);
 
-  const [trending, teams] = await Promise.all([
+  const [trending, teams, membership] = await Promise.all([
     getTrendingPlayers(type, limit),
     getTeams(leagueId),
+    getRosterMembership(leagueId),
   ]);
 
   const owned = new Map<PlayerId, TeamRef>();
   for (const team of teams) {
     const ref = toRef(team);
-    for (const id of team.playerIds) owned.set(id, ref);
+    for (const id of membership[team.rosterId]?.playerIds ?? []) {
+      owned.set(id, ref);
+    }
   }
 
   const players = await getPlayers(trending.map((entry) => entry.player_id));

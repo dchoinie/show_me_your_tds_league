@@ -105,7 +105,7 @@ export async function getRosters(
   leagueId: string = LEAGUE_ID,
 ): Promise<Roster[]> {
   "use cache";
-  cacheLife("sleeperLeague");
+  cacheLife("sleeperRoster");
   cacheTag(CACHE_TAGS.all, CACHE_TAGS.rosters(leagueId));
 
   return sleeperFetchList<Roster>(`/league/${leagueId}/rosters`);

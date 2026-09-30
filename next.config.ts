@@ -31,11 +31,19 @@ const nextConfig: NextConfig = {
       revalidate: 60,
       expire: 60 * 10,
     },
-    // League config, rosters, users, standings. Changes a few times a week.
+    // League config, users, standings. Changes a few times a week.
     sleeperLeague: {
       stale: 60 * 5,
       revalidate: 60 * 15,
       expire: DAY,
+    },
+    // Roster membership. Changes the moment anyone adds, drops or trades, and
+    // people check immediately after making a move - so this is kept close to
+    // live rather than sharing the league-settings clock.
+    sleeperRoster: {
+      stale: 30,
+      revalidate: 60,
+      expire: 60 * 10,
     },
     // Finished weeks, drafts, traded picks. Effectively immutable once written.
     sleeperHistory: {

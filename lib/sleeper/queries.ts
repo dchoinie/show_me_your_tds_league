@@ -63,7 +63,22 @@ export interface Team {
   totalMoves: number;
   waiverPosition: number | null;
   waiverBudgetUsed: number;
+}
+
+/**
+ * Who is actually on a roster, kept separate from {@link Team}.
+ *
+ * Membership changes the instant anyone adds, drops or trades, while a team's
+ * identity and record change weekly at most. Folding them together meant every
+ * cache holding a Team - standings, schedules, draft analysis - also held a
+ * roster, and served it at whatever lifetime that cache happened to use. This
+ * split lets each be cached on its own clock.
+ */
+export interface RosterMembership {
+  rosterId: RosterId;
+  /** Everyone on the roster, taxi and IR included. */
   playerIds: PlayerId[];
+  /** Index-aligned with the league's starting slots. */
   starterIds: PlayerId[];
   reserveIds: PlayerId[];
   taxiIds: PlayerId[];
@@ -101,14 +116,16 @@ function buildTeam(roster: Roster, user: LeagueUser | undefined): Team {
     totalMoves: settings.total_moves ?? 0,
     waiverPosition: settings.waiver_position ?? null,
     waiverBudgetUsed: settings.waiver_budget_used ?? 0,
-    playerIds: roster.players ?? [],
-    starterIds: roster.starters ?? [],
-    reserveIds: roster.reserve ?? [],
-    taxiIds: roster.taxi ?? [],
   };
 }
 
-/** Every team in the league, rosters joined to their managers. */
+/**
+ * Every team in the league, rosters joined to their managers.
+ *
+ * Identity and record only - see {@link getRosterMembership} for who is on
+ * each roster. That separation is what lets this sit on the calmer
+ * league-settings clock without ever serving a stale roster.
+ */
 export async function getTeams(leagueId: string = LEAGUE_ID): Promise<Team[]> {
   "use cache";
   cacheLife("sleeperLeague");
@@ -126,6 +143,35 @@ export async function getTeams(leagueId: string = LEAGUE_ID): Promise<Team[]> {
       buildTeam(roster, roster.owner_id ? usersById.get(roster.owner_id) : undefined),
     )
     .sort((a, b) => a.rosterId - b.rosterId);
+}
+
+/**
+ * Who is on each roster right now, keyed by roster id.
+ *
+ * Cached on the roster clock, so anything rendering a roster gets minute-fresh
+ * data no matter how long-lived the cache that fetched the team alongside it.
+ */
+export async function getRosterMembership(
+  leagueId: string = LEAGUE_ID,
+): Promise<Record<RosterId, RosterMembership>> {
+  "use cache";
+  cacheLife("sleeperRoster");
+  cacheTag(CACHE_TAGS.all, CACHE_TAGS.rosters(leagueId));
+
+  const rosters = await getRosters(leagueId);
+  const membership: Record<RosterId, RosterMembership> = {};
+
+  for (const roster of rosters) {
+    membership[roster.roster_id] = {
+      rosterId: roster.roster_id,
+      playerIds: roster.players ?? [],
+      starterIds: roster.starters ?? [],
+      reserveIds: roster.reserve ?? [],
+      taxiIds: roster.taxi ?? [],
+    };
+  }
+
+  return membership;
 }
 
 /** Index teams by roster id, the key Sleeper uses in matchups and brackets. */
@@ -657,32 +703,34 @@ export async function getTeamRoster(
   leagueId: string = LEAGUE_ID,
 ): Promise<TeamRoster | null> {
   "use cache";
-  cacheLife("sleeperLeague");
+  cacheLife("sleeperRoster");
   cacheTag(CACHE_TAGS.all, CACHE_TAGS.rosters(leagueId));
 
-  const [teams, summary] = await Promise.all([
+  const [teams, summary, membership] = await Promise.all([
     getTeams(leagueId),
     getLeagueSummary(leagueId),
+    getRosterMembership(leagueId),
   ]);
 
   const team = teams.find((entry) => entry.rosterId === rosterId);
-  if (!team) return null;
+  const roster = membership[rosterId];
+  if (!team || !roster) return null;
 
   const players = await getPlayers([
-    ...team.playerIds,
-    ...team.starterIds,
-    ...team.taxiIds,
-    ...team.reserveIds,
+    ...roster.playerIds,
+    ...roster.starterIds,
+    ...roster.taxiIds,
+    ...roster.reserveIds,
   ]);
 
   const starters = summary.startingSlots.map((slot, index) => ({
     slot,
-    player: players[team.starterIds[index]] ?? null,
+    player: players[roster.starterIds[index]] ?? null,
   }));
 
-  const starting = new Set(team.starterIds);
-  const taxi = new Set(team.taxiIds);
-  const reserve = new Set(team.reserveIds);
+  const starting = new Set(roster.starterIds);
+  const taxi = new Set(roster.taxiIds);
+  const reserve = new Set(roster.reserveIds);
 
   const resolve = (ids: PlayerId[]) =>
     ids
@@ -694,12 +742,12 @@ export async function getTeamRoster(
     team,
     starters,
     bench: resolve(
-      team.playerIds.filter(
+      roster.playerIds.filter(
         (id) => !starting.has(id) && !taxi.has(id) && !reserve.has(id),
       ),
     ),
-    taxi: resolve(team.taxiIds),
-    reserve: resolve(team.reserveIds),
+    taxi: resolve(roster.taxiIds),
+    reserve: resolve(roster.reserveIds),
   };
 }
 
