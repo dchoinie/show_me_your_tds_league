@@ -7,6 +7,7 @@ export function SiteFooter() {
         <p>
           Show Me Your TDs — a dynasty fantasy football league.
         </p>
+        {/* nflverse publishes under CC BY 4.0, which requires attribution. */}
         <p>
           Data from{" "}
           <a
@@ -16,6 +17,24 @@ export function SiteFooter() {
             rel="noreferrer"
           >
             Sleeper
+          </a>
+          . Schedule and venue data from{" "}
+          <a
+            href="https://github.com/nflverse/nflverse-data"
+            className="text-ink-muted underline decoration-line underline-offset-4 transition-colors hover:text-accent"
+            target="_blank"
+            rel="noreferrer"
+          >
+            nflverse
+          </a>
+          , licensed{" "}
+          <a
+            href="https://creativecommons.org/licenses/by/4.0/"
+            className="text-ink-muted underline decoration-line underline-offset-4 transition-colors hover:text-accent"
+            target="_blank"
+            rel="noreferrer"
+          >
+            CC BY 4.0
           </a>
           .
         </p>

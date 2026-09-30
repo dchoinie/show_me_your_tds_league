@@ -26,6 +26,7 @@ export * from "./types";
 export * from "./http";
 export * from "./api";
 export * from "./schedule";
+export * from "./live";
 export * from "./players";
 export * from "./directory";
 export * from "./scoring";

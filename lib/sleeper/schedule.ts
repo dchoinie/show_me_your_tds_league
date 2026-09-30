@@ -3,6 +3,11 @@ import { cacheLife, cacheTag } from "next/cache";
 import { getCurrentWeek, getNflState } from "./api";
 import { CACHE_TAGS, LEAGUE_ID, SLEEPER_ROOT_URL } from "./config";
 import { sleeperFetch } from "./http";
+import {
+  fixtureKey,
+  getNflverseGames,
+  indexByFixture,
+} from "../nflverse/games";
 import { getPlayers } from "./players";
 import { getWeekMatchups, type TeamRef } from "./queries";
 import type { PlayerId } from "./types";
@@ -39,9 +44,31 @@ export interface GameStarter {
   fantasyTeam: TeamRef;
 }
 
+/** Fixed game facts from nflverse. Null when that join finds nothing. */
+export interface GameFacts {
+  /** Kickoff as an ISO instant. */
+  kickoff: string | null;
+  /** HH:MM in US Eastern. */
+  gametime: string;
+  stadium: string;
+  roof: string;
+  /** "Home", or "Neutral" for the international games. */
+  location: string;
+  /** Home spread; negative means the home side is favoured. */
+  spreadLine: number | null;
+  totalLine: number | null;
+  divisionGame: boolean;
+  awayQb: string;
+  homeQb: string;
+  awayScore: number | null;
+  homeScore: number | null;
+}
+
 export interface PreviewGame extends NflGame {
   /** League starters playing in this game, best positions first. */
   starters: GameStarter[];
+  /** nflverse metadata, or null if unavailable. */
+  facts: GameFacts | null;
 }
 
 export interface WeekSlate {
@@ -205,6 +232,10 @@ export async function getWeekPreview(
     ]);
   }
 
+  // Kickoff times, venue and lines. Optional - an empty result just means the
+  // preview stays day-granular.
+  const facts = indexByFixture(await getNflverseGames(state.season));
+
   const today = easternToday();
   const byDate = new Map<string, PreviewGame[]>();
 
@@ -214,9 +245,32 @@ export async function getWeekPreview(
       ...(byNflTeam.get(game.home) ?? []),
     ].sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
 
+    // Joined on the fixture, not the date: Sleeper dates a game by its local
+    // kickoff day while nflverse uses Eastern, which disagree for late games.
+    const match = facts[fixtureKey(game.week, game.away, game.home)];
+
     byDate.set(game.date, [
       ...(byDate.get(game.date) ?? []),
-      { ...game, starters: inGame },
+      {
+        ...game,
+        starters: inGame,
+        facts: match
+          ? {
+              kickoff: match.kickoff,
+              gametime: match.gametime,
+              stadium: match.stadium,
+              roof: match.roof,
+              location: match.location,
+              spreadLine: match.spreadLine,
+              totalLine: match.totalLine,
+              divisionGame: match.divisionGame,
+              awayQb: match.awayQb,
+              homeQb: match.homeQb,
+              awayScore: match.awayScore,
+              homeScore: match.homeScore,
+            }
+          : null,
+      },
     ]);
   }
 

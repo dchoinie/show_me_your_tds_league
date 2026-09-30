@@ -31,6 +31,13 @@ const nextConfig: NextConfig = {
       revalidate: 60,
       expire: 60 * 10,
     },
+    // The live game tracker. Sleeper's own scoring lands 30-90s behind the
+    // play, so polling faster than this returns identical bytes.
+    sleeperGameday: {
+      stale: 15,
+      revalidate: 30,
+      expire: 60 * 10,
+    },
     // League config, users, standings. Changes a few times a week.
     sleeperLeague: {
       stale: 60 * 5,
@@ -50,6 +57,13 @@ const nextConfig: NextConfig = {
       stale: 60 * 60,
       revalidate: DAY,
       expire: DAY * 30,
+    },
+    // nflverse game metadata. Their pipeline rebuilds a handful of times a
+    // day, so checking more often than this just re-downloads the same file.
+    nflverseData: {
+      stale: 60 * 60,
+      revalidate: 60 * 60 * 6,
+      expire: DAY * 2,
     },
     // The ~5MB player dictionary. Sleeper asks for at most one call per day.
     sleeperPlayers: {
