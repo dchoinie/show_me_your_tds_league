@@ -45,33 +45,8 @@ export default async function Home() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-12">
-        <div className="mb-4 flex items-baseline justify-between gap-4">
-          <h2 className="font-display text-2xl font-bold tracking-tight text-ink">
-            Standings
-          </h2>
-          <Link
-            href="/standings"
-            className="eyebrow text-xs text-ink-muted transition-colors hover:text-accent"
-          >
-            View all →
-          </Link>
-        </div>
-
-        <StandingsTable
-          rows={standings}
-          playoffTeams={summary.playoffTeams}
-        />
-
-        {summary.playoffTeams !== null && (
-          <p className="mt-3 text-xs text-ink-dim">
-            Top {summary.playoffTeams} make the playoffs — the line marks the
-            current cut.
-          </p>
-        )}
-      </section>
-
-      <section className="border-t border-line bg-surface/30">
+      {/* No border-t here: the hero above already closes with a border-b. */}
+      <section className="bg-surface/30">
         <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-12">
           <div className="mb-5 flex items-baseline justify-between gap-4">
             <h2 className="font-display text-2xl font-bold tracking-tight text-ink">
@@ -103,6 +78,34 @@ export default async function Home() {
             <p className="mt-4 text-xs text-ink-dim">
               Projections are Sleeper&apos;s weekly player projections scored
               under this league&apos;s rules, including the TE premium.
+            </p>
+          )}
+        </div>
+      </section>
+
+      <section className="border-t border-line">
+        <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-12">
+          <div className="mb-4 flex items-baseline justify-between gap-4">
+            <h2 className="font-display text-2xl font-bold tracking-tight text-ink">
+              Standings
+            </h2>
+            <Link
+              href="/standings"
+              className="eyebrow text-xs text-ink-muted transition-colors hover:text-accent"
+            >
+              View all →
+            </Link>
+          </div>
+
+          <StandingsTable
+            rows={standings}
+            playoffTeams={summary.playoffTeams}
+          />
+
+          {summary.playoffTeams !== null && (
+            <p className="mt-3 text-xs text-ink-dim">
+              Top {summary.playoffTeams} make the playoffs — the line marks the
+              current cut.
             </p>
           )}
         </div>

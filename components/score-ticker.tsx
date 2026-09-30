@@ -1,7 +1,5 @@
-import Link from "next/link";
-
-import { StatusBadge } from "@/components/status-badge";
-import { getScoreStrip, type WeekMatchup } from "@/lib/sleeper";
+import { ScoreTickerStrip } from "@/components/score-ticker-strip";
+import { getTickerPayload } from "@/lib/sleeper";
 
 const STRIP_HEIGHT = "h-10";
 
@@ -15,79 +13,23 @@ export function ScoreTickerFallback() {
   );
 }
 
-function Chip({ matchup, week }: { matchup: WeekMatchup; week: number }) {
-  const [home, away] = matchup.sides;
-  if (!home) return null;
-
-  return (
-    <Link
-      href={`/matchups/${week}/${matchup.id}`}
-      className="flex shrink-0 items-center gap-3 border-r border-line px-4 py-1.5 transition-colors hover:bg-surface-2"
-    >
-      <StatusBadge status={matchup.status} size="xs" />
-      <span className="flex items-center gap-2 whitespace-nowrap text-sm">
-        <span
-          className={
-            matchup.winnerRosterId === home.team.rosterId
-              ? "font-semibold text-ink"
-              : "text-ink-muted"
-          }
-        >
-          {home.team.teamName}
-        </span>
-        {matchup.status === "preview" ? (
-          <span className="text-ink-dim">vs</span>
-        ) : (
-          <span className="numerals text-ink">
-            {home.points.toFixed(2)}
-            <span className="px-1 text-ink-dim">–</span>
-            {away ? away.points.toFixed(2) : "—"}
-          </span>
-        )}
-        {away && (
-          <span
-            className={
-              matchup.winnerRosterId === away.team.rosterId
-                ? "font-semibold text-ink"
-                : "text-ink-muted"
-            }
-          >
-            {away.team.teamName}
-          </span>
-        )}
-      </span>
-    </Link>
-  );
-}
-
+/**
+ * Server shell for the header ticker.
+ *
+ * Fetches the first payload so the strip is populated on first paint, then
+ * hands off to a client component that refreshes it in place - otherwise the
+ * scores would sit frozen for anyone who leaves a page open on a Sunday.
+ */
 export async function ScoreTicker() {
-  const { week, matchups } = await getScoreStrip();
+  const payload = await getTickerPayload();
 
-  if (matchups.length === 0) return <ScoreTickerFallback />;
+  if (payload.games.length === 0) return <ScoreTickerFallback />;
 
   return (
     <div
       className={`ticker ${STRIP_HEIGHT} relative flex items-center overflow-hidden border-b border-line bg-surface`}
     >
-      <span className="eyebrow z-10 flex h-full shrink-0 items-center bg-accent px-3 text-[10px] text-accent-ink">
-        Week {week}
-      </span>
-
-      {/*
-       * Two identical copies of the chip list sit side by side; the track
-       * translates -50% so the loop is seamless. The clone is hidden under
-       * reduced motion, where the strip becomes a plain scroll area.
-       */}
-      <div className="ticker-track flex w-max items-center">
-        {matchups.map((matchup) => (
-          <Chip key={matchup.id} matchup={matchup} week={week} />
-        ))}
-        <div className="flex items-center" data-ticker-clone="true" aria-hidden>
-          {matchups.map((matchup) => (
-            <Chip key={`clone-${matchup.id}`} matchup={matchup} week={week} />
-          ))}
-        </div>
-      </div>
+      <ScoreTickerStrip initial={payload} />
     </div>
   );
 }

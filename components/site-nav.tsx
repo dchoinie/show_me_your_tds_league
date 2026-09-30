@@ -52,7 +52,9 @@ export function SiteNav() {
     pathname === href || pathname.startsWith(`${href}/`);
 
   return (
-    <header className="sticky top-0 z-50 border-b border-line bg-field/95 backdrop-blur">
+    // Not sticky itself: the layout pins this and the score ticker together
+    // as one block, so they never drift apart while scrolling.
+    <div className="border-b border-line bg-field/95 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-7xl items-center gap-6 px-4 sm:px-6">
         <Link
           href="/"
@@ -130,6 +132,6 @@ export function SiteNav() {
           </ul>
         </nav>
       )}
-    </header>
+    </div>
   );
 }

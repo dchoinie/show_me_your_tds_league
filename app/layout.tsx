@@ -42,14 +42,20 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${inter.variable} ${barlowCondensed.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col bg-field text-ink">
-        <SiteNav />
         {/*
-         * The ticker reads live scores, so it streams in behind a fallback of
-         * the same height. Everything else in the shell is prerendered.
+         * Nav and ticker are pinned as a single block, so scores stay on
+         * screen on every page and all the way down a long scroll.
          */}
-        <Suspense fallback={<ScoreTickerFallback />}>
-          <ScoreTicker />
-        </Suspense>
+        <header className="sticky top-0 z-50">
+          <SiteNav />
+          {/*
+           * The ticker reads live scores, so it streams in behind a fallback
+           * of the same height. Everything else in the shell is prerendered.
+           */}
+          <Suspense fallback={<ScoreTickerFallback />}>
+            <ScoreTicker />
+          </Suspense>
+        </header>
         <main className="flex-1">{children}</main>
         <SiteFooter />
       </body>
