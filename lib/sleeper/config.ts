@@ -26,6 +26,15 @@ export const REGULAR_SEASON_WEEKS = 18;
 export const MAX_FANTASY_WEEK = 18;
 
 /**
+ * Rounds in the annual rookie draft.
+ *
+ * From the league constitution, not the API: Sleeper's `draft_rounds` still
+ * reports 29 from the inaugural auction and has no knowledge of the linear
+ * rookie drafts that follow it.
+ */
+export const ROOKIE_DRAFT_ROUNDS = 4;
+
+/**
  * Cache tags, so a single piece of data can be revalidated on demand via
  * `revalidateTag` (see app/api/revalidate/route.ts) instead of waiting out the
  * cacheLife window.

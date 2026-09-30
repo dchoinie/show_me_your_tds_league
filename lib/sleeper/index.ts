@@ -37,4 +37,5 @@ export * from "./stats";
 export * from "./analytics";
 export * from "./queries";
 export * from "./history";
+export * from "./futures";
 export * from "./urls";

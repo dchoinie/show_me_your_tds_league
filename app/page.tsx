@@ -1,11 +1,13 @@
 import Link from "next/link";
 
 import { MatchupCard } from "@/components/matchup-card";
+import { DraftOutlookSection } from "@/components/draft-outlook";
 import { LeagueHistorySection } from "@/components/league-history";
 import { StandingsTable } from "@/components/standings-table";
 import { WeekPreviewSection } from "@/components/week-preview";
 import {
   getCurrentWeekMatchups,
+  getDraftOutlook,
   getLeagueHistorySummary,
   getLeagueSummary,
   getStandings,
@@ -18,6 +20,7 @@ export default async function Home() {
   const { week: matchupWeek, matchups } = await getCurrentWeekMatchups();
   const history = await getLeagueHistorySummary();
   const preview = await getWeekPreview();
+  const outlook = await getDraftOutlook();
 
   const { league, formatLabels, weeksToPlayoffs } = summary;
 
@@ -102,6 +105,12 @@ export default async function Home() {
               under this league&apos;s rules, including the TE premium.
             </p>
           )}
+        </div>
+      </section>
+
+      <section className="border-t border-line bg-surface/30">
+        <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-12">
+          <DraftOutlookSection outlook={outlook} />
         </div>
       </section>
 
