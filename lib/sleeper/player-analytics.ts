@@ -1,6 +1,10 @@
 import { cacheLife, cacheTag } from "next/cache";
 
-import { getNflverseUsage, getSleeperToGsis } from "../nflverse/usage";
+import {
+  getNflverseUsage,
+  getSleeperToGsis,
+  type PlayerUsage,
+} from "../nflverse/usage";
 import { getLeague, getNflState } from "./api";
 import { CACHE_TAGS, LEAGUE_ID } from "./config";
 import { getAllPlayers } from "./players";
@@ -33,6 +37,43 @@ const USAGE_POSITIONS = ["RB", "WR", "TE"];
 /** A position needs this many players before ranks mean anything. */
 const MIN_SAMPLE = 4;
 
+/**
+ * Positions where air yards mean anything.
+ *
+ * Backs are excluded on purpose. A screen caught behind the line of scrimmage
+ * has negative air yards, which makes depth of target negative, pushes yards
+ * after the catch above 100% of total yards, and leaves the conversion ratio
+ * at zero. The arithmetic is not wrong, it just does not describe anything.
+ */
+const AIR_YARD_POSITIONS = ["WR", "TE"];
+
+/**
+ * Targets needed before depth of target is worth showing at all.
+ *
+ * Position is not a sufficient filter: a receiver with three targets breaks
+ * these metrics the same way a back does. Measured across every pass catcher
+ * this season, this floor is where the nonsense stops - below it there are
+ * depths of target near 37 yards and yards-after-catch shares past 500%, and
+ * at it the deepest role in the league reads a believable 19. It is set to
+ * keep genuine low-volume starters rather than only the target hogs.
+ */
+const MIN_TARGETS_FOR_DEPTH = 12;
+
+/** Air yards needed before a conversion ratio is worth reading. */
+const MIN_AIR_YARDS = 150;
+
+/**
+ * Targets needed before lagging conversion is called out.
+ *
+ * Higher than the display floor, because air yards alone are easy to
+ * accumulate: five targets thrown 30 yards downfield clear the air-yard
+ * threshold without describing a real role.
+ */
+const MIN_TARGETS_OWED = 15;
+
+/** Share of the baseline below which conversion counts as lagging. */
+const UNDER_CONVERTING_RATIO = 0.7;
+
 export type UsageSignal = "underused" | "aligned" | "overperforming";
 
 export interface UsageRow {
@@ -49,6 +90,17 @@ export interface UsageRow {
   targetShare: number | null;
   wopr: number | null;
   epa: number | null;
+  /** Average depth of target. Null for backs - see AIR_YARD_POSITIONS. */
+  adot: number | null;
+  /** Share of receiving yards gained after the catch, 0-1. */
+  yacShare: number | null;
+  /** Receiving yards per air yard. Low means deep targets are not landing. */
+  racr: number | null;
+  /**
+   * True when a receiver has real downfield volume that has not converted -
+   * the yards are owed rather than absent.
+   */
+  underConverting: boolean;
   /** Season points under this league's scoring. */
   points: number;
   pointsPerOpportunity: number | null;
@@ -65,6 +117,8 @@ export interface UsageRow {
 export interface PlayerAnalytics {
   available: boolean;
   season: string;
+  /** Median conversion ratio among pass catchers, the comparison point. */
+  racrBaseline: number | null;
   /** Rostered players with usage data. */
   matched: number;
   /** Rostered players we could not reach - almost all have no stat line. */
@@ -128,6 +182,7 @@ export async function getPlayerAnalytics(
   const empty: PlayerAnalytics = {
     available: false,
     season,
+    racrBaseline: null,
     matched: 0,
     unmatched: 0,
     rows: [],
@@ -150,6 +205,8 @@ export async function getPlayerAnalytics(
   }
 
   const rows: UsageRow[] = [];
+  /** Raw stat lines, keyed by player id, for deriving the air-yard columns. */
+  const statLines = new Map<string, PlayerUsage>();
   let unmatched = 0;
 
   for (const playerId of ownerByPlayer.keys()) {
@@ -191,11 +248,69 @@ export async function getPlayerAnalytics(
         opportunity.count > 0
           ? Number((points / opportunity.count).toFixed(2))
           : null,
+      adot: null,
+      yacShare: null,
+      racr: null,
+      underConverting: false,
       usageRank: 0,
       pointsRank: 0,
       rankDelta: 0,
       signal: null,
     });
+
+    statLines.set(playerId, stats);
+  }
+
+  // Depth and yards-after-catch, for the positions where they describe
+  // something real.
+  for (const row of rows) {
+    const stats = statLines.get(row.playerId);
+    if (!stats || !AIR_YARD_POSITIONS.includes(row.position)) continue;
+    if (stats.targets < MIN_TARGETS_FOR_DEPTH) continue;
+
+    row.adot = Number((stats.receivingAirYards / stats.targets).toFixed(1));
+    row.yacShare =
+      stats.receivingYards > 0
+        ? stats.receivingYac / stats.receivingYards
+        : null;
+    row.racr =
+      stats.receivingAirYards > 0
+        ? Number((stats.receivingYards / stats.receivingAirYards).toFixed(2))
+        : null;
+  }
+
+  // Baseline taken from pass catchers only, which the loop above has already
+  // arranged: a ratio exists only where it means something. Including backs
+  // would drag it badly, their screens producing ratios of zero and four alike.
+  const ratios = rows
+    .filter(
+      (row) =>
+        row.racr !== null &&
+        (statLines.get(row.playerId)?.receivingAirYards ?? 0) >=
+          MIN_AIR_YARDS / 2,
+    )
+    .map((row) => row.racr as number)
+    .sort((a, b) => a - b);
+
+  const racrBaseline =
+    ratios.length > 0
+      ? Number(
+          (ratios.length % 2 === 0
+            ? (ratios[ratios.length / 2 - 1] + ratios[ratios.length / 2]) / 2
+            : ratios[(ratios.length - 1) / 2]
+          ).toFixed(2),
+        )
+      : null;
+
+  if (racrBaseline !== null) {
+    for (const row of rows) {
+      const stats = statLines.get(row.playerId);
+      row.underConverting =
+        row.racr !== null &&
+        (stats?.receivingAirYards ?? 0) >= MIN_AIR_YARDS &&
+        (stats?.targets ?? 0) >= MIN_TARGETS_OWED &&
+        row.racr <= racrBaseline * UNDER_CONVERTING_RATIO;
+    }
   }
 
   // Rank within position, so a QB's attempt count is never compared to a
@@ -233,6 +348,7 @@ export async function getPlayerAnalytics(
   return {
     available: true,
     season,
+    racrBaseline,
     matched: rows.length,
     unmatched,
     rows,

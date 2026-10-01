@@ -45,11 +45,16 @@ function gameStatus(
     return "final";
   }
 
-  if (now !== null && game.facts?.kickoff) {
-    return now >= Date.parse(game.facts.kickoff) ? "live" : "preview";
+  // A known kickoff is never guessed at. Before hydration `now` is null, and
+  // "preview" is the honest answer then: claiming a game is live hours before
+  // it starts is worse than being briefly conservative about one that is.
+  if (game.facts?.kickoff) {
+    const kickoff = Date.parse(game.facts.kickoff);
+    return now !== null && now >= kickoff ? "live" : "preview";
   }
 
-  // No kickoff time available - fall back to the slate's position in the week.
+  // No kickoff time available - fall back to the slate's position in the week,
+  // which is the best that Sleeper's date-only schedule supports.
   if (slate.complete || slate.daysAway < 0) return "final";
   return slate.daysAway === 0 ? "live" : "preview";
 }

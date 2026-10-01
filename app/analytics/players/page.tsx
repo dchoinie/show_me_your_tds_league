@@ -57,6 +57,35 @@ export default async function PlayerAnalyticsPage() {
                 below.
               </p>
               <p>
+                <span className="text-ink-muted">aDOT</span> is average depth of
+                target, which says what kind of receiver someone is — a 17-yard
+                aDOT is a downfield role, a 6-yard one is short-area work.{" "}
+                <span className="text-ink-muted">YAC</span> is the share of
+                yards gained after the catch; above 60% it turns amber, because
+                yards after the catch depend on broken tackles and space and
+                repeat less reliably than downfield volume does.
+              </p>
+              <p>
+                Both are blank for running backs, and for anyone under a dozen
+                targets. A screen caught behind the line has negative air yards,
+                which makes depth of target negative and pushes yards after the
+                catch past 100% of the total — arithmetically fine,
+                descriptively meaningless. Three targets do the same thing to a
+                receiver, which is why the floor is on volume and not only on
+                position.
+              </p>
+              <p>
+                A buy marked{" "}
+                <span className="text-ink-muted">&middot; owed</span> is the
+                stronger version of the case: real downfield volume that has
+                not converted yet, rather than simply targets without points.
+                Measured against a median conversion ratio of{" "}
+                <span className="numerals text-ink-muted">
+                  {analytics.racrBaseline?.toFixed(2) ?? "—"}
+                </span>{" "}
+                yards per air yard among pass catchers.
+              </p>
+              <p>
                 Covers {analytics.matched} rostered players.{" "}
                 {analytics.unmatched} are not shown, almost all because they
                 have no {analytics.season} stat line at all — stashed rookies

@@ -33,6 +33,10 @@ export interface PlayerUsage {
   interceptions: number;
   rushingYards: number;
   rushingTds: number;
+  receivingYards: number;
+  /** Yards the ball travelled to the catch point, summed over targets. */
+  receivingAirYards: number;
+  receivingYac: number;
   /** Mean weekly share of the team's targets, 0-1. */
   targetShare: number | null;
   /** Mean weekly share of the team's air yards, 0-1. */
@@ -92,6 +96,9 @@ export async function getNflverseUsage(
         interceptions: 0,
         rushingYards: 0,
         rushingTds: 0,
+        receivingYards: 0,
+        receivingAirYards: 0,
+        receivingYac: 0,
         targetShare: null,
         airYardsShare: null,
         wopr: null,
@@ -114,6 +121,9 @@ export async function getNflverseUsage(
     entry.interceptions += num(at(row, "passing_interceptions")) ?? 0;
     entry.rushingYards += num(at(row, "rushing_yards")) ?? 0;
     entry.rushingTds += num(at(row, "rushing_tds")) ?? 0;
+    entry.receivingYards += num(at(row, "receiving_yards")) ?? 0;
+    entry.receivingAirYards += num(at(row, "receiving_air_yards")) ?? 0;
+    entry.receivingYac += num(at(row, "receiving_yards_after_catch")) ?? 0;
 
     // EPA is additive across weeks; the share metrics are rates, so they are
     // averaged over the weeks that actually reported one.
@@ -162,6 +172,9 @@ export async function getNflverseUsage(
       interceptions: entry.interceptions,
       rushingYards: entry.rushingYards,
       rushingTds: entry.rushingTds,
+      receivingYards: entry.receivingYards,
+      receivingAirYards: entry.receivingAirYards,
+      receivingYac: entry.receivingYac,
       targetShare:
         entry.shareCount > 0 ? entry.shareSum / entry.shareCount : null,
       airYardsShare:

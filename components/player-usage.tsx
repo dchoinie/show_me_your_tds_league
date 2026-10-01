@@ -27,6 +27,14 @@ const SIGNAL_TITLES: Record<UsageSignal, string> = {
     "Scoring well above the underlying usage, which rarely holds",
 };
 
+/**
+ * A buy signal reads differently when the volume is specifically downfield
+ * work that has not converted — the yards are owed rather than absent, which
+ * is the stronger version of the same case.
+ */
+const OWED_TITLE =
+  "Real downfield volume that has not converted to yards — the targets are landing, the production is not yet";
+
 type Sort = "usage" | "points" | "signal";
 
 const SORTS: { key: Sort; label: string }[] = [
@@ -89,11 +97,25 @@ function Row({ row }: { row: UsageRow }) {
       <td className="numerals px-3 py-2.5 text-right text-ink-muted">
         {row.wopr === null ? "—" : row.wopr.toFixed(2)}
       </td>
+      <td className="numerals px-3 py-2.5 text-right text-ink-muted">
+        {row.adot === null ? "—" : row.adot.toFixed(1)}
+      </td>
+      <td
+        className={`numerals px-3 py-2.5 text-right ${
+          row.yacShare !== null && row.yacShare >= 0.6
+            ? "text-accent"
+            : "text-ink-muted"
+        }`}
+        title={
+          row.yacShare !== null && row.yacShare >= 0.6
+            ? "Most of these yards came after the catch, which repeats less reliably than downfield volume"
+            : undefined
+        }
+      >
+        {row.yacShare === null ? "—" : `${Math.round(row.yacShare * 100)}%`}
+      </td>
       <td className="numerals px-3 py-2.5 text-right text-ink">
         {row.points.toFixed(1)}
-      </td>
-      <td className="numerals px-3 py-2.5 text-right text-ink-muted">
-        {row.pointsPerOpportunity?.toFixed(2) ?? "—"}
       </td>
 
       <td className="px-3 py-2.5 text-right">
@@ -106,9 +128,14 @@ function Row({ row }: { row: UsageRow }) {
           {row.signal ? (
             <span
               className={`eyebrow shrink-0 rounded px-1.5 py-0.5 text-[9px] ${SIGNAL_STYLES[row.signal]}`}
-              title={SIGNAL_TITLES[row.signal]}
+              title={
+                row.signal === "underused" && row.underConverting
+                  ? OWED_TITLE
+                  : SIGNAL_TITLES[row.signal]
+              }
             >
               {SIGNAL_LABELS[row.signal]}
+              {row.signal === "underused" && row.underConverting && " · owed"}
             </span>
           ) : (
             <span className="eyebrow shrink-0 px-1.5 text-[9px] text-ink-dim">
@@ -230,7 +257,7 @@ export function PlayerUsageTable({
       </div>
 
       <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-        <table className="w-full min-w-216 border-collapse text-sm">
+        <table className="w-full min-w-240 border-collapse text-sm">
           <caption className="sr-only">
             Usage against production for rostered players
           </caption>
@@ -260,14 +287,20 @@ export function PlayerUsageTable({
               >
                 WOPR
               </th>
-              <th className="eyebrow px-3 py-2 text-right text-[10px] text-ink-dim">
-                Pts
+              <th
+                className="eyebrow px-3 py-2 text-right text-[10px] text-ink-dim"
+                title="Average depth of target, in yards. Receivers and tight ends only"
+              >
+                aDOT
               </th>
               <th
                 className="eyebrow px-3 py-2 text-right text-[10px] text-ink-dim"
-                title="League points per opportunity"
+                title="Share of receiving yards gained after the catch"
               >
-                Pts/opp
+                YAC
+              </th>
+              <th className="eyebrow px-3 py-2 text-right text-[10px] text-ink-dim">
+                Pts
               </th>
               <th className="eyebrow px-3 py-2 text-right text-[10px] text-ink-dim">
                 Usage → scoring
