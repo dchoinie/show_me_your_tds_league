@@ -1,5 +1,8 @@
+"use client";
+
 import Link from "next/link";
 
+import { SortHeader, sortRows, useSort } from "@/components/sortable";
 import { TeamAvatar } from "@/components/team-avatar";
 import type {
   AgeAnalysis,
@@ -122,11 +125,29 @@ function DeltaTag({ delta }: { delta: number | null }) {
   );
 }
 
+type AgeSort = "team" | "youthShare" | "rosterAge" | "productionAge" | "skew";
+
+const AGE_SORTS: Record<
+  AgeSort,
+  (team: TeamAgeProfile) => number | string | null
+> = {
+  team: (team) => team.team.teamName,
+  youthShare: (team) => team.youthShare,
+  rosterAge: (team) => team.rosterAge,
+  productionAge: (team) => team.productionAge,
+  skew: (team) => team.ageDelta,
+};
+
 function ProductionTable({ analysis }: { analysis: AgeAnalysis }) {
   // Youngest-scoring first: the teams whose points come from their kids.
-  const rows = [...analysis.teams].sort(
-    (a, b) => (b.youthShare ?? 0) - (a.youthShare ?? 0),
-  );
+  const [sort, onSort] = useSort<AgeSort>({
+    key: "youthShare",
+    direction: "desc",
+  });
+  const sortProps = { sort, onSort };
+  const rows = sort
+    ? sortRows(analysis.teams, AGE_SORTS[sort.key], sort.direction)
+    : analysis.teams;
 
   return (
     <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
@@ -136,36 +157,39 @@ function ProductionTable({ analysis }: { analysis: AgeAnalysis }) {
         </caption>
         <thead>
           <tr className="border-b border-line">
-            <th className="eyebrow px-3 py-2 text-left text-[10px] text-ink-dim">
-              Team
-            </th>
+            <SortHeader
+              label="Team"
+              sortKey="team"
+              align="left"
+              {...sortProps}
+            />
             <th className="eyebrow px-3 py-2 text-left text-[10px] text-ink-dim">
               Points by age
             </th>
-            <th
-              className="eyebrow px-3 py-2 text-right text-[10px] text-ink-dim"
+            <SortHeader
+              label="U25 pts"
+              sortKey="youthShare"
               title="Share of the team's points scored by players under 25"
-            >
-              U25 pts
-            </th>
-            <th
-              className="eyebrow px-3 py-2 text-right text-[10px] text-ink-dim"
+              {...sortProps}
+            />
+            <SortHeader
+              label="Roster"
+              sortKey="rosterAge"
               title="Plain average age of everyone on the roster"
-            >
-              Roster
-            </th>
-            <th
-              className="eyebrow px-3 py-2 text-right text-[10px] text-ink-dim"
+              {...sortProps}
+            />
+            <SortHeader
+              label="Scoring"
+              sortKey="productionAge"
               title="Average age weighted by points scored"
-            >
-              Scoring
-            </th>
-            <th
-              className="eyebrow px-3 py-2 text-right text-[10px] text-ink-dim"
+              {...sortProps}
+            />
+            <SortHeader
+              label="Skew"
+              sortKey="skew"
               title="Scoring age minus roster age"
-            >
-              Skew
-            </th>
+              {...sortProps}
+            />
           </tr>
         </thead>
         <tbody>

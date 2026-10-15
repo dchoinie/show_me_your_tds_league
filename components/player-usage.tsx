@@ -4,6 +4,12 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { PositionBadge } from "@/components/player-row";
+import {
+  SortHeader,
+  type SortDirection,
+  sortRows,
+  useSort,
+} from "@/components/sortable";
 import type { PlayerAnalytics, UsageRow, UsageSignal } from "@/lib/sleeper";
 
 const POSITIONS = ["RB", "WR", "TE"] as const;
@@ -35,13 +41,29 @@ const SIGNAL_TITLES: Record<UsageSignal, string> = {
 const OWED_TITLE =
   "Real downfield volume that has not converted to yards — the targets are landing, the production is not yet";
 
-type Sort = "usage" | "points" | "signal";
+type Sort =
+  | "player"
+  | "owner"
+  | "opportunities"
+  | "targetShare"
+  | "wopr"
+  | "adot"
+  | "yac"
+  | "points"
+  | "signal";
 
-const SORTS: { key: Sort; label: string }[] = [
-  { key: "usage", label: "Opportunity" },
-  { key: "points", label: "Points" },
-  { key: "signal", label: "Signal" },
-];
+const SORTS: Record<Sort, (row: UsageRow) => number | string | null> = {
+  player: (row) => row.name,
+  owner: (row) => row.team?.teamName ?? null,
+  opportunities: (row) => row.opportunities,
+  targetShare: (row) => row.targetShare,
+  wopr: (row) => row.wopr,
+  adot: (row) => row.adot,
+  yac: (row) => row.yacShare,
+  points: (row) => row.points,
+  // Ascending puts the most underused first, so the acquisition targets lead.
+  signal: (row) => (row.signal === null ? null : row.rankDelta),
+};
 
 /**
  * What the table shows by default.
@@ -154,7 +176,7 @@ export function PlayerUsageTable({
   analytics: PlayerAnalytics;
 }) {
   const [position, setPosition] = useState<string | null>(null);
-  const [sort, setSort] = useState<Sort>("signal");
+  const [sort, toggleSort] = useSort<Sort>({ key: "signal", direction: "asc" });
   const [view, setView] = useState<View>("movers");
   const [visible, setVisible] = useState(PAGE_SIZE);
 
@@ -167,17 +189,9 @@ export function PlayerUsageTable({
       return true;
     });
 
-    return [...filtered].sort((a, b) => {
-      if (sort === "points") return b.points - a.points;
-      // Most underused first: the acquisition targets lead the list.
-      if (sort === "signal") {
-        if (a.signal === null && b.signal === null) return 0;
-        if (a.signal === null) return 1;
-        if (b.signal === null) return -1;
-        return a.rankDelta - b.rankDelta;
-      }
-      return b.opportunities - a.opportunities;
-    });
+    return sort
+      ? sortRows(filtered, SORTS[sort.key], sort.direction)
+      : filtered;
   }, [analytics.rows, position, sort, view]);
 
   const shown = rows.slice(0, visible);
@@ -189,6 +203,14 @@ export function PlayerUsageTable({
       setter(value);
       setVisible(PAGE_SIZE);
     };
+
+  const sortProps = {
+    sort,
+    onSort: (key: Sort, firstDirection: SortDirection) => {
+      toggleSort(key, firstDirection);
+      setVisible(PAGE_SIZE);
+    },
+  };
 
   const button = (active: boolean) =>
     `eyebrow rounded px-3 py-2 text-xs transition-colors ${
@@ -239,20 +261,6 @@ export function PlayerUsageTable({
               {label}
             </button>
           ))}
-          <span className="eyebrow self-center pr-1 pl-2 text-[10px] text-ink-dim">
-            Sort
-          </span>
-          {SORTS.map(({ key, label }) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => reset(setSort)(key)}
-              aria-pressed={sort === key}
-              className={button(sort === key)}
-            >
-              {label}
-            </button>
-          ))}
         </div>
       </div>
 
@@ -263,48 +271,56 @@ export function PlayerUsageTable({
           </caption>
           <thead>
             <tr className="border-b border-line">
-              <th className="eyebrow px-3 py-2 text-left text-[10px] text-ink-dim">
-                Player
-              </th>
-              <th className="eyebrow px-3 py-2 text-left text-[10px] text-ink-dim">
-                Owner
-              </th>
-              <th
-                className="eyebrow px-3 py-2 text-right text-[10px] text-ink-dim"
+              <SortHeader
+                label="Player"
+                sortKey="player"
+                align="left"
+                {...sortProps}
+              />
+              <SortHeader
+                label="Owner"
+                sortKey="owner"
+                align="left"
+                {...sortProps}
+              />
+              <SortHeader
+                label="Opp"
+                sortKey="opportunities"
                 title="Targets for receivers, touches for backs, attempts plus carries for quarterbacks"
-              >
-                Opp
-              </th>
-              <th
-                className="eyebrow px-3 py-2 text-right text-[10px] text-ink-dim"
+                {...sortProps}
+              />
+              <SortHeader
+                label="Tgt share"
+                sortKey="targetShare"
                 title="Average weekly share of the team's targets"
-              >
-                Tgt share
-              </th>
-              <th
-                className="eyebrow px-3 py-2 text-right text-[10px] text-ink-dim"
+                {...sortProps}
+              />
+              <SortHeader
+                label="WOPR"
+                sortKey="wopr"
                 title="Weighted Opportunity Rating"
-              >
-                WOPR
-              </th>
-              <th
-                className="eyebrow px-3 py-2 text-right text-[10px] text-ink-dim"
+                {...sortProps}
+              />
+              <SortHeader
+                label="aDOT"
+                sortKey="adot"
                 title="Average depth of target, in yards. Receivers and tight ends only"
-              >
-                aDOT
-              </th>
-              <th
-                className="eyebrow px-3 py-2 text-right text-[10px] text-ink-dim"
+                {...sortProps}
+              />
+              <SortHeader
+                label="YAC"
+                sortKey="yac"
                 title="Share of receiving yards gained after the catch"
-              >
-                YAC
-              </th>
-              <th className="eyebrow px-3 py-2 text-right text-[10px] text-ink-dim">
-                Pts
-              </th>
-              <th className="eyebrow px-3 py-2 text-right text-[10px] text-ink-dim">
-                Usage → scoring
-              </th>
+                {...sortProps}
+              />
+              <SortHeader label="Pts" sortKey="points" {...sortProps} />
+              <SortHeader
+                label="Usage → scoring"
+                sortKey="signal"
+                firstDirection="asc"
+                title="Usage rank against scoring rank, within position. Most underused first"
+                {...sortProps}
+              />
             </tr>
           </thead>
           <tbody>

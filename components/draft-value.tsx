@@ -1,6 +1,9 @@
+"use client";
+
 import Link from "next/link";
 
 import { PositionBadge } from "@/components/player-row";
+import { SortHeader, sortRows, useSort } from "@/components/sortable";
 import type {
   DraftValueAnalysis,
   PositionAnalysis,
@@ -79,6 +82,17 @@ function PositionTiers({ analysis }: { analysis: PositionAnalysis }) {
   );
 }
 
+type ValueSort = "player" | "price" | "points" | "games" | "rank";
+
+const VALUE_SORTS: Record<ValueSort, (row: ValueRow) => number | string> = {
+  player: (row) => row.playerName,
+  price: (row) => row.price,
+  points: (row) => row.points,
+  games: (row) => row.games,
+  // How far a player outran his price: QB2 → QB19 is -17, QB19 → QB2 is +17.
+  rank: (row) => row.priceRank - row.pointsRank,
+};
+
 function ValueTable({
   title,
   rows,
@@ -88,6 +102,12 @@ function ValueTable({
   rows: ValueRow[];
   tone: "steal" | "bust";
 }) {
+  const [sort, onSort] = useSort<ValueSort>();
+  const sortProps = { sort, onSort };
+  const sorted = sort
+    ? sortRows(rows, VALUE_SORTS[sort.key], sort.direction)
+    : rows;
+
   return (
     <div>
       <h3 className="eyebrow mb-2 text-xs text-ink-muted">{title}</h3>
@@ -95,25 +115,25 @@ function ValueTable({
         <table className="w-full min-w-120 border-collapse text-sm">
           <thead>
             <tr className="border-b border-line">
-              <th className="eyebrow px-3 py-2 text-left text-[10px] text-ink-dim">
-                Player
-              </th>
-              <th className="eyebrow px-3 py-2 text-right text-[10px] text-ink-dim">
-                Paid
-              </th>
-              <th className="eyebrow px-3 py-2 text-right text-[10px] text-ink-dim">
-                Pts
-              </th>
-              <th className="eyebrow px-3 py-2 text-right text-[10px] text-ink-dim">
-                GP
-              </th>
-              <th className="eyebrow px-3 py-2 text-right text-[10px] text-ink-dim">
-                Rank
-              </th>
+              <SortHeader
+                label="Player"
+                sortKey="player"
+                align="left"
+                {...sortProps}
+              />
+              <SortHeader label="Paid" sortKey="price" {...sortProps} />
+              <SortHeader label="Pts" sortKey="points" {...sortProps} />
+              <SortHeader label="GP" sortKey="games" {...sortProps} />
+              <SortHeader
+                label="Rank"
+                sortKey="rank"
+                title="Price rank against points rank, within position"
+                {...sortProps}
+              />
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
+            {sorted.map((row) => (
               <tr key={row.playerId} className="border-b border-line/60">
                 <td className="px-3 py-2">
                   <span className="flex items-center gap-2">

@@ -4,6 +4,12 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { PositionBadge } from "@/components/player-row";
+import {
+  SortHeader,
+  type SortDirection,
+  sortRows,
+  useSort,
+} from "@/components/sortable";
 import type { SnapAnalytics, SnapRow, SnapTrend } from "@/lib/sleeper";
 
 const POSITIONS = ["QB", "RB", "WR", "TE"] as const;
@@ -31,6 +37,16 @@ const pct = (value: number) => `${Math.round(value * 100)}%`;
  * steady 70% snap share is the absence of news. The full list is a click away.
  */
 type Movement = "movers" | "rising" | "falling" | "all";
+
+type Sort = "player" | "owner" | "season" | "latest" | "trend";
+
+const SORTS: Record<Sort, (row: SnapRow) => number | string | null> = {
+  player: (row) => row.name,
+  owner: (row) => row.team?.teamName ?? null,
+  season: (row) => row.seasonPct,
+  latest: (row) => row.latestPct,
+  trend: (row) => row.trend,
+};
 
 /** Rows rendered at once; more load on request. */
 const PAGE_SIZE = 25;
@@ -174,9 +190,10 @@ export function SnapShareTable({ analytics }: { analytics: SnapAnalytics }) {
   const [ownership, setOwnership] = useState<Ownership>("all");
   const [movement, setMovement] = useState<Movement>("movers");
   const [visible, setVisible] = useState(PAGE_SIZE);
+  const [sort, toggleSort] = useSort<Sort>();
 
   const rows = useMemo(() => {
-    return analytics.rows
+    const filtered = analytics.rows
       .filter((row) => {
         if (position && row.position !== position) return false;
         if (ownership === "rostered" && !row.team) return false;
@@ -191,7 +208,10 @@ export function SnapShareTable({ analytics }: { analytics: SnapAnalytics }) {
           (b.trend ?? -Infinity) - (a.trend ?? -Infinity) ||
           b.latestPct - a.latestPct,
       );
-  }, [analytics.rows, position, ownership, movement]);
+    return sort
+      ? sortRows(filtered, SORTS[sort.key], sort.direction)
+      : filtered;
+  }, [analytics.rows, position, ownership, movement, sort]);
 
   const shown = rows.slice(0, visible);
   const throughWeek = analytics.throughWeek ?? 0;
@@ -202,6 +222,14 @@ export function SnapShareTable({ analytics }: { analytics: SnapAnalytics }) {
       setter(value);
       setVisible(PAGE_SIZE);
     };
+
+  const sortProps = {
+    sort,
+    onSort: (key: Sort, firstDirection: SortDirection) => {
+      toggleSort(key, firstDirection);
+      setVisible(PAGE_SIZE);
+    },
+  };
 
   const button = (active: boolean) =>
     `eyebrow rounded px-3 py-2 text-xs transition-colors ${
@@ -292,27 +320,29 @@ export function SnapShareTable({ analytics }: { analytics: SnapAnalytics }) {
             <caption className="sr-only">Snap share by week</caption>
             <thead>
               <tr className="border-b border-line">
-                <th className="eyebrow px-3 py-2 text-left text-[10px] text-ink-dim">
-                  Player
-                </th>
-                <th className="eyebrow px-3 py-2 text-left text-[10px] text-ink-dim">
-                  Owner
-                </th>
+                <SortHeader
+                  label="Player"
+                  sortKey="player"
+                  align="left"
+                  {...sortProps}
+                />
+                <SortHeader
+                  label="Owner"
+                  sortKey="owner"
+                  align="left"
+                  {...sortProps}
+                />
                 <th className="eyebrow px-3 py-2 text-left text-[10px] text-ink-dim">
                   By week
                 </th>
-                <th className="eyebrow px-3 py-2 text-right text-[10px] text-ink-dim">
-                  Season
-                </th>
-                <th className="eyebrow px-3 py-2 text-right text-[10px] text-ink-dim">
-                  Latest
-                </th>
-                <th
-                  className="eyebrow px-3 py-2 text-right text-[10px] text-ink-dim"
+                <SortHeader label="Season" sortKey="season" {...sortProps} />
+                <SortHeader label="Latest" sortKey="latest" {...sortProps} />
+                <SortHeader
+                  label="Trend"
+                  sortKey="trend"
                   title="The latest week against the average of the weeks before it"
-                >
-                  Trend
-                </th>
+                  {...sortProps}
+                />
               </tr>
             </thead>
             <tbody>

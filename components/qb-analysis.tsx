@@ -1,6 +1,9 @@
+"use client";
+
 import Link from "next/link";
 
 import { PositionBadge } from "@/components/player-row";
+import { SortHeader, sortRows, useSort } from "@/components/sortable";
 import type { QbAnalysis, QbRow, QbSignal } from "@/lib/sleeper";
 
 const SIGNAL_LABELS: Record<QbSignal, string> = {
@@ -21,6 +24,29 @@ const SIGNAL_TITLES: Record<QbSignal, string> = {
   aligned: "Scoring roughly what the volume and yardage support",
   regression:
     "Scoring above what the yardage supports, on a touchdown rate unlikely to hold",
+};
+
+type QbSort =
+  | "player"
+  | "owner"
+  | "attempts"
+  | "passingYards"
+  | "rushingYards"
+  | "tdRate"
+  | "expected"
+  | "points"
+  | "gap";
+
+const QB_SORTS: Record<QbSort, (row: QbRow) => number | string | null> = {
+  player: (row) => row.name,
+  owner: (row) => row.team?.teamName ?? null,
+  attempts: (row) => row.attempts,
+  passingYards: (row) => row.passingYards,
+  rushingYards: (row) => row.rushingYards,
+  tdRate: (row) => row.tdRate,
+  expected: (row) => row.expectedPoints,
+  points: (row) => row.points,
+  gap: (row) => row.delta,
 };
 
 function Row({ row, leagueTdRate }: { row: QbRow; leagueTdRate: number | null }) {
@@ -103,7 +129,13 @@ function Row({ row, leagueTdRate }: { row: QbRow; leagueTdRate: number | null })
 
 export function QbAnalysisSection({ analysis }: { analysis: QbAnalysis }) {
   const { rows, leagueTdRate } = analysis;
+  const [sort, onSort] = useSort<QbSort>();
+  const sortProps = { sort, onSort };
   if (rows.length === 0) return null;
+
+  const sorted = sort
+    ? sortRows(rows, QB_SORTS[sort.key], sort.direction)
+    : rows;
 
   return (
     <section>
@@ -135,43 +167,47 @@ export function QbAnalysisSection({ analysis }: { analysis: QbAnalysis }) {
           </caption>
           <thead>
             <tr className="border-b border-line">
-              <th className="eyebrow px-3 py-2 text-left text-[10px] text-ink-dim">
-                Player
-              </th>
-              <th className="eyebrow px-3 py-2 text-left text-[10px] text-ink-dim">
-                Owner
-              </th>
-              <th className="eyebrow px-3 py-2 text-right text-[10px] text-ink-dim">
-                Att
-              </th>
-              <th className="eyebrow px-3 py-2 text-right text-[10px] text-ink-dim">
-                Pass yd
-              </th>
-              <th className="eyebrow px-3 py-2 text-right text-[10px] text-ink-dim">
-                Rush yd
-              </th>
-              <th
-                className="eyebrow px-3 py-2 text-right text-[10px] text-ink-dim"
+              <SortHeader
+                label="Player"
+                sortKey="player"
+                align="left"
+                {...sortProps}
+              />
+              <SortHeader
+                label="Owner"
+                sortKey="owner"
+                align="left"
+                {...sortProps}
+              />
+              <SortHeader label="Att" sortKey="attempts" {...sortProps} />
+              <SortHeader
+                label="Pass yd"
+                sortKey="passingYards"
+                {...sortProps}
+              />
+              <SortHeader
+                label="Rush yd"
+                sortKey="rushingYards"
+                {...sortProps}
+              />
+              <SortHeader
+                label="TD rate"
+                sortKey="tdRate"
                 title="Passing touchdowns per attempt, against the league average"
-              >
-                TD rate
-              </th>
-              <th
-                className="eyebrow px-3 py-2 text-right text-[10px] text-ink-dim"
+                {...sortProps}
+              />
+              <SortHeader
+                label="Expected"
+                sortKey="expected"
                 title="Points the yardage and volume support at league-average touchdown rates"
-              >
-                Expected
-              </th>
-              <th className="eyebrow px-3 py-2 text-right text-[10px] text-ink-dim">
-                Actual
-              </th>
-              <th className="eyebrow px-3 py-2 text-right text-[10px] text-ink-dim">
-                Gap
-              </th>
+                {...sortProps}
+              />
+              <SortHeader label="Actual" sortKey="points" {...sortProps} />
+              <SortHeader label="Gap" sortKey="gap" {...sortProps} />
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
+            {sorted.map((row) => (
               <Row key={row.playerId} row={row} leagueTdRate={leagueTdRate} />
             ))}
           </tbody>
