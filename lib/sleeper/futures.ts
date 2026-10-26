@@ -6,7 +6,7 @@ import { getLeagueSummary, getStandings, type TeamRef } from "./queries";
 import type { RosterId } from "./types";
 
 /**
- * The playoff race and next year's rookie draft.
+ * The playoff race and the next three rookie drafts.
  *
  * Both fall out of the standings because of the 2026 constitution amendment:
  * with the Toilet Bowl and the weighted lottery removed, draft order is purely
@@ -40,25 +40,28 @@ export interface DraftPickSlot {
   traded: boolean;
 }
 
-export interface FutureTrade {
+export interface DraftYear {
   season: string;
-  round: number;
-  originalTeam: TeamRef;
-  owner: TeamRef;
+  /**
+   * True for next year only: the standings can project its order. Later
+   * drafts have no order yet, so their slots are just today's arrangement.
+   */
+  projected: boolean;
+  picks: DraftPickSlot[];
 }
 
+/** How many rookie drafts ahead Sleeper tracks picks for. */
+const DRAFT_SEASONS_AHEAD = 3;
+
 export interface DraftOutlook {
-  /** The season being projected, i.e. next year. */
-  season: string;
   rounds: number;
   playoffTeams: number;
   playoffWeekStart: number | null;
   isPlayoffs: boolean;
   currentWeek: number;
   seeds: PlayoffSeed[];
-  picks: DraftPickSlot[];
-  /** Traded picks for seasons beyond the projected one. */
-  futureTrades: FutureTrade[];
+  /** Next year's draft first, then the ones after it. */
+  drafts: DraftYear[];
 }
 
 const toRef = (team: {
@@ -90,7 +93,9 @@ export async function getDraftOutlook(
   ]);
 
   const playoffTeams = summary.playoffTeams ?? 6;
-  const season = String(Number(summary.league.season) + 1);
+  const seasons = Array.from({ length: DRAFT_SEASONS_AHEAD }, (_, i) =>
+    String(Number(summary.league.season) + 1 + i),
+  );
 
   // Worst record picks first. With the lottery gone this is the whole rule.
   const order = [...standings].reverse();
@@ -127,56 +132,44 @@ export async function getDraftOutlook(
   // `roster_id` on a traded pick is whose pick it originally was.
   const ownerByPick = new Map<string, RosterId>();
   for (const pick of traded) {
-    if (pick.season !== season) continue;
-    ownerByPick.set(`${pick.round}:${pick.roster_id}`, pick.owner_id);
+    ownerByPick.set(
+      `${pick.season}:${pick.round}:${pick.roster_id}`,
+      pick.owner_id,
+    );
   }
 
-  const picks: DraftPickSlot[] = [];
+  const drafts: DraftYear[] = seasons.map((season, yearIndex) => {
+    const picks: DraftPickSlot[] = [];
 
-  for (let round = 1; round <= ROOKIE_DRAFT_ROUNDS; round++) {
-    order.forEach((team, index) => {
-      const slot = index + 1;
-      const ownerId =
-        ownerByPick.get(`${round}:${team.rosterId}`) ?? team.rosterId;
-      const owner = byRosterId.get(ownerId);
+    for (let round = 1; round <= ROOKIE_DRAFT_ROUNDS; round++) {
+      order.forEach((team, index) => {
+        const slot = index + 1;
+        const ownerId =
+          ownerByPick.get(`${season}:${round}:${team.rosterId}`) ??
+          team.rosterId;
+        const owner = byRosterId.get(ownerId);
 
-      picks.push({
-        label: pickLabel(round, slot),
-        round,
-        slot,
-        originalTeam: toRef(team),
-        owner: owner ? toRef(owner) : toRef(team),
-        traded: ownerId !== team.rosterId,
+        picks.push({
+          label: pickLabel(round, slot),
+          round,
+          slot,
+          originalTeam: toRef(team),
+          owner: owner ? toRef(owner) : toRef(team),
+          traded: ownerId !== team.rosterId,
+        });
       });
-    });
-  }
+    }
 
-  const futureTrades: FutureTrade[] = traded
-    .filter((pick) => pick.season !== season)
-    .flatMap((pick) => {
-      const original = byRosterId.get(pick.roster_id);
-      const owner = byRosterId.get(pick.owner_id);
-      if (!original || !owner) return [];
-      return [
-        {
-          season: pick.season,
-          round: pick.round,
-          originalTeam: toRef(original),
-          owner: toRef(owner),
-        },
-      ];
-    })
-    .sort((a, b) => a.season.localeCompare(b.season) || a.round - b.round);
+    return { season, projected: yearIndex === 0, picks };
+  });
 
   return {
-    season,
     rounds: ROOKIE_DRAFT_ROUNDS,
     playoffTeams,
     playoffWeekStart: summary.playoffWeekStart,
     isPlayoffs: summary.isPlayoffs,
     currentWeek: summary.currentWeek,
     seeds,
-    picks,
-    futureTrades,
+    drafts,
   };
 }
